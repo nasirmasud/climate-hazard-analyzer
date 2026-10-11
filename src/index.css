@@ -1,0 +1,22 @@
+@import 'tailwindcss';
+
+/* One warm accent for heat, one cool accent for the trend line. Nothing else
+   carries meaning by colour alone, per the visual design rules. */
+@theme {
+  --color-heat: #e4492b;
+  --color-heat-soft: #fff1ec;
+  --color-trend: #1769ff;
+  --color-trend-soft: #eff5ff;
+  --color-ink: #103876;
+  --color-ink-muted: #5479b8;
+  --color-line: #d5e7ff;
+  --color-surface: #f8fbff;
+}
+
+body {
+  margin: 0;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: Inter, 'Segoe UI', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
