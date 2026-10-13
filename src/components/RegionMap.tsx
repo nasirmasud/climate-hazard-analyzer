@@ -18,6 +18,10 @@
  * ERA5 is a grid, so only the point at the box's centre is actually queried.
  * The rectangle shows the area the user selected and the marker sits at the one
  * point that is read, which keeps that distinction visible instead of implied.
+ *
+ * The window is 2:1 and limited to 58S–72N, so that zooming out fills it with
+ * map rather than grey bands or a repeated world. See `mapViewport.ts` for why
+ * those three options have to agree.
  */
 
 import { useEffect, useMemo } from 'react'
@@ -32,6 +36,7 @@ import {
 import { divIcon } from 'leaflet'
 
 import { boxCenter, boxFromClick } from '../boxGeometry'
+import { VIEWPORT_BOUNDS, enforceViewportBand } from '../mapViewport'
 import type { BoxBounds } from '../validation'
 
 const OSM_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
@@ -52,26 +57,24 @@ const DEFAULT_ZOOM = 6
 const CHOSEN_ZOOM = 8
 
 /**
- * Height of the map, in pixels. A fixed value, never `auto` or a percentage.
+ * Shape of the map window, as a CSS aspect ratio rather than a pixel height.
  *
- * Leaflet measures its container to fill it, so a parent that sizes itself from
- * its content collapses the map to zero before that measurement can happen. A
- * number here is the only thing that reliably works.
+ * Leaflet measures its container to fill it, so the container needs a height it
+ * can resolve before that measurement happens. An `aspect-ratio` with a definite
+ * width gives one, where `height: auto` would collapse the map to zero.
+ *
+ * **2:1** rather than a fixed height because the minimum zoom that fills the
+ * window with no grey bands depends on the window's shape (see `mapViewport.ts`).
+ * At a fixed height, a wider viewport would either clip the band or leave grey
+ * at the sides. Pinning the ratio keeps the fit exact at every width.
  */
-const MAP_HEIGHT_PX = 360
+const MAP_ASPECT = '2 / 1'
 
 interface Props {
   box: BoxBounds | null
   onPick: (box: BoxBounds) => void
 }
 
-/**
- * A plain div marker rather than Leaflet's default pin image.
- *
- * The default pins come from image files that a bundler does not rewrite inside
- * a package, which produces the classic "marker-icon.png failed to load"
- * problem. A divIcon needs no asset and reuses the warm accent from the theme.
- */
 /**
  * A plain div marker rather than Leaflet's default pin image.
  *
@@ -130,26 +133,77 @@ function Recentre({ center }: { center: [number, number] }) {
   return null
 }
 
+/**
+ * Applies the viewport band, and keeps it applied as the window resizes.
+ *
+ * A child of `MapContainer` because the map instance does not exist until the
+ * container has mounted and measured itself.
+ */
+function ViewportBand() {
+  const map = useMap()
+
+  useEffect(() => {
+    const container = map.getContainer()
+
+    /**
+     * Observed rather than listening to `window.resize`, because the map is 2:1:
+     * its height changes whenever its *width* changes, which a window-level
+     * listener never sees — a sidebar opening or a breakpoint crossing changes
+     * the column width without the window resizing at all.
+     */
+    const subscribe = (handler: () => void) => {
+      if (typeof ResizeObserver === 'undefined') {
+        window.addEventListener('resize', handler)
+        return () => window.removeEventListener('resize', handler)
+      }
+
+      const observer = new ResizeObserver(() => {
+        // The map's cached size is stale until this runs, and getBoundsZoom
+        // measures against the cached size, so it has to come first.
+        map.invalidateSize()
+        handler()
+      })
+      observer.observe(container)
+
+      return () => observer.disconnect()
+    }
+
+    return enforceViewportBand(map, subscribe)
+  }, [map])
+
+  return null
+}
+
 export function RegionMap({ box, onPick }: Props) {
   const center = useMemo(() => boxCenter(box), [box])
 
   return (
-    <div className="mt-3 overflow-hidden rounded border border-line">
+    <div
+      className="mt-3 overflow-hidden rounded border border-line"
+      style={{ aspectRatio: MAP_ASPECT }}
+    >
       <MapContainer
         center={center ?? DEFAULT_CENTER}
         zoom={center ? CHOSEN_ZOOM : DEFAULT_ZOOM}
-        // A fixed height, because a Leaflet map inside an auto-height parent
-        // collapses to zero before it can measure itself.
-        style={{ height: MAP_HEIGHT_PX, width: '100%' }}
+        // The band, applied as options that have to agree. maxBounds keeps the
+        // view over the latitudes worth showing, minZoom — set by ViewportBand
+        // below, because it depends on the measured size — is the level at
+        // which the window exactly covers the band, and noWrap lives on the tile
+        // layer below because that is where it belongs. Without all three,
+        // zooming out shows grey bands or two copies of the world.
+        maxBounds={VIEWPORT_BOUNDS}
+        // h-full w-full to fill the aspect-ratio wrapper. z-0 to sit below the
+        // sticky headers, so panning the map never scrolls the page instead.
+        className="z-0 h-full w-full"
         scrollWheelZoom
-        // Below the sticky headers, so panning never scrolls the page instead.
-        className="z-0"
         {...MAP_PROPS}
       >
-        <TileLayer url={OSM_URL} attribution={OSM_ATTRIBUTION} />
+        <TileLayer url={OSM_URL} attribution={OSM_ATTRIBUTION} noWrap />
 
         {/* Always mounted: this is what creates the first box. */}
         <ClickHandler onPick={onPick} />
+
+        <ViewportBand />
 
         {center && <Recentre center={center} />}
 
