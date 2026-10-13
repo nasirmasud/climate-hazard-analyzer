@@ -1103,3 +1103,139 @@ out without touching any code above it.
 `vitest` was added as a dev dependency. This is outside the brief's §2 list, and
 worth flagging: the project had no frontend test runner at all, so the box maths
 had no regression protection until now.
+
+---
+
+## Phase 8 - Free-tier wake-up
+
+Deployed on Render (free web service) behind Vercel. The first symptom was that
+the page got stuck on "checking backend" and never recovered, which turned out to
+be three separate problems rather than one.
+
+### The stuck label was an unbounded fetch
+
+`getHealth()` had no timeout and no retry beyond the global `retry: 1`, so a
+single attempt was made about three seconds in. Worse, that attempt had no
+timeout at all: a sleeping Render instance accepts the TCP connection and then
+says nothing for as long as it takes to boot, so `fetch` simply hung. Measured on
+the deployed service, that is **32.65 seconds** for the very first request.
+
+`request()` now takes an optional `timeoutMs`, and `getHealth` passes 15 seconds.
+That timeout is deliberately *not* applied to the analysis endpoint. A first
+analysis for an unseen location fetches decades of daily history upstream, and a
+timeout there would abort legitimate work.
+
+Two details inside that timeout are easy to get wrong:
+
+- It is a manual `AbortController` rather than `AbortSignal.timeout`, because
+  `placeLookup.ts` had already established that not every environment this bundle
+  runs in provides it.
+- It throws a **plain `Error`, not the `AbortError` that `fetch` throws**. React
+  Query reads an `AbortError` as "this query was cancelled" and skips the retry
+  counter entirely, which would have silently reduced twenty attempts to one. The
+  `cause` is attached so the original is not lost, which the repo's
+  `preserve-caught-error` lint rule enforces.
+
+### The policy, and why each number is what it is
+
+`useBackendHealth()` owns all of it: **15s** per attempt, **4s** between attempts,
+**20 attempts** in total, **10 minutes** between keep-alive pings. Twenty attempts
+at four seconds apart is about a minute and a half of trying, comfortably longer
+than the ~30 s boot, and comfortably shorter than Render's 15-minute idle timeout
+that causes it.
+
+The four React Query settings that make this work are each load-bearing:
+
+- `refetchIntervalInBackground: false` is what "while the tab is visible" means.
+  A hidden tab has nobody waiting, and Render would let the instance sleep anyway.
+- `staleTime: 0` plus `refetchOnWindowFocus: 'always'` makes returning to the tab
+  an immediate check. The five-minute global `staleTime` would otherwise treat a
+  result fetched ten seconds ago as fresh and skip the ping exactly when the
+  instance is most likely to have gone.
+- `retry: 19`, not `20`. React Query's `retry` counts retries *after* the first
+  attempt, so 19 is twenty in total.
+- `refetchOnMount: 'always'`, so a remount is never served a stale verdict.
+
+### A ready page must never go back to the overlay
+
+React Query retains the last successful `data` while a background ping retries,
+and still retains it after those retries are exhausted. Deriving the status from
+`data !== undefined` first means a failed ten-minute keep-alive ping leaves a
+working page alone. Reading `isError` first would have thrown a page that is
+demonstrably working back behind a blocking overlay every time the network
+blinked. That single ordering decision is covered by its own test.
+
+### Gating beats queueing
+
+`regions` and `useAnalysis` are both `enabled`-gated on the health check, and
+`App.tsx` renders nothing but the header and the wake-up card until it passes. A
+waking backend cannot answer those requests either, so ungated they would simply
+queue behind a boot that has not started. Because they are gated rather than
+queued, a user who presses Analyze during the wake-up gets their analysis the
+moment the health check passes, without pressing it again.
+
+`getPlaceName` is the one endpoint not gated explicitly. It is only reachable by
+clicking the map, which the overlay makes impossible, so the gate is enforced by
+what is on screen rather than by a check in the code.
+
+### The CORS bug that was never CORS
+
+`FRONTEND_ORIGIN` documented a single origin, but `.env` had been given a
+comma-separated pair, and `main.py` put the raw string into the allowlist as one
+entry. That matches no browser at all, so every request was rejected for want of
+an `Access-Control-Allow-Origin` header - which presents exactly like a dead
+backend, because opening the URL in a tab still works. A direct navigation sends
+no `Origin` header and CORS never applies to it.
+
+It was masked for `http://localhost:5173` purely by luck: the localhost test only
+inspected the start of the string, so the development port sweep happened to
+cover the port in use. The second origin in the list was unreachable the whole
+time, and reordering the list so the local entry was not first would have broken
+local development too.
+
+`Settings.frontend_origins` now splits and trims the list, as a property rather
+than a second field so it cannot drift from the environment variable and can be
+tested without reimporting the settings module.
+
+### "Every" is the security-relevant word in the localhost sweep
+
+The development port sweep is a convenience with a real cost - on a public
+deployment it would let any page running on a visitor's machine read this API's
+responses - so `has_local_frontend` asks whether **every** configured origin is
+local, not whether any is. With `any`, one deployed origin in the list would vote
+for the sweep and open that hole on Render.
+
+The cost is a genuine surprise, now documented at the call site: listing a
+deployed origin alongside a local one switches the sweep off, so a developer
+running both against one backend has to name the exact port they use.
+
+### The tests had to stop reading `.env`
+
+There were **zero** CORS tests, which is why this survived. The first draft of
+`test_cors.py` asserted that `localhost:5177` is allowed - and failed, correctly,
+because this checkout's `.env` lists a public origin alongside the local one and
+so has the sweep switched off.
+
+The test was wrong, not the code: asserting a hardcoded port against a `.env` that
+is deliberately never committed means the test passes or fails depending on the
+developer's own configuration, which is worse than having no test. `main.py` now
+exposes `ALLOWED_ORIGINS` and the tests assert against the live configuration
+instead - every configured origin is allowed, an unlisted one is not, and the
+sweep is present exactly when `has_local_frontend` says it should be.
+
+### Verifying the deployed CORS directly
+
+Worth recording how, since it needs no tooling. A preflight and a plain request
+with an `Origin` header, using PowerShell:
+
+```
+Invoke-WebRequest -Uri https://climate-trend-backend.onrender.com/api/health -Method Options `
+  -Headers @{Origin='https://climate-trend.vercel.app';
+            'Access-Control-Request-Method'='GET'}
+```
+
+Against the deployed service: the allowed origin returns `200` with
+`access-control-allow-origin` echoed back, while `https://evil.example` and
+`http://localhost:5173` both return a response with **no** such header - which is
+what makes the browser refuse the body. That is the whole enforcement mechanism,
+and it is invisible if you only ever test with `curl` and no `Origin`.
