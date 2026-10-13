@@ -15,7 +15,10 @@ python -m venv .venv
 .venv\Scripts\activate
 ```
 
-Copy `.env.example` to `.env` and fill in `MONGODB_URI`:
+Create a `.env` file in this directory containing these five variables. There is
+no template to copy from, deliberately: a tracked template is where a real
+connection string ends up pasted by accident, which is exactly what happened
+here once already.
 
 ```
 MONGODB_URI=mongodb+srv://user:password@cluster.mongodb.net
@@ -60,13 +63,20 @@ present, which is the normal case for this repository on its own.
 | `routes.py` | API endpoints |
 | `schemas.py` | Pydantic request and response models — the contract |
 | `regions.py` | Preset regions |
+| `analysis.py` | Pipeline order: fetch, detect, trend, narrate (Phase 2) |
 | `ingest.py` | Open-Meteo fetch, cleaning, quality flags (Phase 2) |
 | `heatwave.py` | Thresholds and event detection (Phase 2) |
 | `trends.py` | Mann-Kendall and regression (Phase 4) |
 | `insights.py` | Insight sentences from numbers (Phase 4) |
 | `db.py` | MongoDB connection and queries (Phase 3) |
+| `ratelimit.py` | Two rate-limit budgets: general and upstream (Phase 6) |
+| `places.py` | Reverse geocoding for the map's place names (Phase 7) |
 
 ## Current status
 
-Phase 1 of the build plan. Health and regions endpoints, plus the frozen
-response contract. Analysis pipeline lands in Phase 2.
+Build Phases 1 to 7 are complete and verified: the analysis pipeline, the
+MongoDB cache, the trend quality guards, rate limiting, and the location map.
+The suite is 136 tests, run against a real Atlas instance.
+
+Nothing is deployed yet. What remains is Phase 8 (deployment) and Phase 9 (the
+`§18.3` README deliverable and the final checks).
