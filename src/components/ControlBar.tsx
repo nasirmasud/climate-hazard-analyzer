@@ -255,7 +255,10 @@ export function ControlBar({ regions, isLoading, onSubmit }: Props) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="mb-4 rounded-lg border border-line bg-white p-4"
+      // Hidden when printing: inputs, the preset picker and the Analyze button
+      // are controls, and controls are meaningless on paper. Everything they
+      // produced is in the results below.
+      className="mb-4 rounded-lg border border-line bg-white p-4 print:hidden"
     >
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div>
