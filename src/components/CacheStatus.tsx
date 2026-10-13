@@ -35,7 +35,7 @@ export function CacheStatus({ data, isFetching }: Props) {
   // rather than showing a flag that describes the outgoing request.
   if (isFetching) {
     return (
-      <p className="mb-3 text-xs text-ink-muted" role="status" aria-live="polite">
+      <p className="mb-3 text-xs text-ink-muted print:hidden" role="status" aria-live="polite">
         Refreshing these results…
       </p>
     )
@@ -44,11 +44,11 @@ export function CacheStatus({ data, isFetching }: Props) {
   const cached = data.cached
 
   return (
-    <p
-      className="mb-3 flex items-center gap-2 text-xs text-ink-muted"
-      role="status"
-      aria-live="polite"
-    >
+<p
+        className="mb-3 flex items-center gap-2 text-xs text-ink-muted print:hidden"
+        role="status"
+        aria-live="polite"
+      >
       <span
         aria-hidden="true"
         className={`inline-block h-2 w-2 rounded-full ${cached ? 'bg-trend' : 'bg-heat'}`}
