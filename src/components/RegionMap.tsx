@@ -179,7 +179,7 @@ export function RegionMap({ box, onPick }: Props) {
 
   return (
     <div
-      className="mt-3 overflow-hidden rounded border border-line"
+      className="mt-3 overflow-hidden rounded border border-line print:hidden"
       style={{ aspectRatio: MAP_ASPECT }}
     >
       <MapContainer
