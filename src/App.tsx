@@ -1,34 +1,36 @@
 /**
- * Page shell for the layout the brief specifies, top to bottom:
+ * Page shell, in the order the brief specifies:
  *   title -> control bar -> four summary cards -> chart + region ->
  *   insights + threshold + table -> footer
  *
- * Phase 1 is the contract phase, so the panels are empty placeholders. Every
- * one shows an em dash rather than a made-up number, because nothing here may
- * display a value that did not come from the API.
+ * Every panel renders from one `AnalysisResponse`. There is no second request
+ * and no client-side arithmetic on results, which is what keeps the cards, the
+ * chart, the insights and the table telling the same story (section 8.7).
+ *
+ * Until a response arrives, every number shows a skeleton or an em dash. No
+ * placeholder figures appear anywhere in this file.
  */
 
 import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 
-import { getHealth, getRegions } from './api'
-import type { PresetRegion } from './types'
-
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-lg border border-line bg-white p-4">
-      <h2 className="mb-3 text-sm font-bold text-ink">{title}</h2>
-      {children}
-    </section>
-  )
-}
-
-function Placeholder({ children }: { children: string }) {
-  return <p className="text-xs text-ink-muted">{children}</p>
-}
+import { getHealth, getRegions, ApiError } from './api'
+import { CacheStatus } from './components/CacheStatus'
+import { ControlBar } from './components/ControlBar'
+import { DataTable } from './components/DataTable'
+import { FrequencyChart } from './components/FrequencyChart'
+import { InsightsPanel } from './components/InsightsPanel'
+import { RegionPanel } from './components/RegionPanel'
+import { ErrorState, LoadingState } from './components/States'
+import { SummaryCards } from './components/SummaryCards'
+import { ThresholdCard } from './components/ThresholdCard'
+import { TrendCard } from './components/TrendCard'
+import { useAnalysis } from './hooks/useAnalysis'
+import type { AnalysisParams, PresetRegion } from './types'
 
 function App() {
-  // Confirms the backend is reachable. Also doubles as a cold-start check:
-  // on a free tier the first request can take about a minute.
+  // Confirms the backend is reachable at all. Cheap, and it is how a failed
+  // analysis is distinguished from an unreachable server.
   const health = useQuery({ queryKey: ['health'], queryFn: getHealth })
 
   const regions = useQuery<PresetRegion[]>({
@@ -36,14 +38,27 @@ function App() {
     queryFn: getRegions,
   })
 
+  // Only set when the form is submitted. Until then no analysis request exists,
+  // so editing a year field cannot trigger a fetch.
+  const [params, setParams] = useState<AnalysisParams | null>(null)
+  const analysis = useAnalysis(params)
+
   const backendLabel = health.isPending
     ? 'checking backend…'
     : health.isError
       ? 'backend unreachable'
       : `backend ok · ${regions.data?.length ?? 0} preset regions`
 
+  const data = analysis.data
+  const errorMessage =
+    analysis.error instanceof ApiError
+      ? analysis.error.message
+      : analysis.error
+        ? 'Something went wrong.'
+        : null
+
   return (
-    <main className="mx-auto max-w-6xl px-6 py-8">
+    <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <header className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight text-ink">
           Climate Hazard Trend Analyzer
@@ -54,32 +69,45 @@ function App() {
         <p className="mt-2 text-xs text-ink-muted">{backendLabel}</p>
       </header>
 
-      <div className="mb-4 rounded-lg border border-line bg-white p-4">
-        <p className="text-sm text-ink-muted">
-          Control bar, summary cards and results panels arrive in Phase 2.
-        </p>
-      </div>
+      <ControlBar
+        regions={regions.data ?? []}
+        isLoading={analysis.isFetching}
+        onSubmit={setParams}
+      />
 
-      <div className="mb-4 grid gap-4 md:grid-cols-2">
-        <Panel title="Summary">
-          <Placeholder>—</Placeholder>
-        </Panel>
-        <Panel title="Heatwave frequency trend">
-          <Placeholder>—</Placeholder>
-        </Panel>
-      </div>
+      {analysis.isFetching && <LoadingState />}
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Panel title="Key insights">
-          <Placeholder>—</Placeholder>
-        </Panel>
-        <Panel title="Threshold">
-          <Placeholder>—</Placeholder>
-        </Panel>
-        <Panel title="Detailed data">
-          <Placeholder>—</Placeholder>
-        </Panel>
-      </div>
+      {errorMessage && (
+        <ErrorState
+          message={errorMessage}
+          status={analysis.error instanceof ApiError ? analysis.error.status : undefined}
+          onRetry={() => analysis.refetch()}
+        />
+      )}
+
+      <CacheStatus data={data} isFetching={analysis.isFetching} />
+
+      <SummaryCards data={data} isLoading={analysis.isFetching} />
+
+      {data && (
+        <>
+          <div className="mb-4 grid gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <FrequencyChart data={data} />
+            </div>
+            <RegionPanel data={data} />
+          </div>
+
+          <div className="mb-4 grid gap-4 lg:grid-cols-3">
+            <InsightsPanel data={data} />
+            <div className="space-y-4">
+              <TrendCard data={data} />
+              <ThresholdCard data={data} />
+            </div>
+            <DataTable yearly={data.yearly} downloadParams={params} />
+          </div>
+        </>
+      )}
 
       <footer className="mt-8 text-right text-xs text-ink-muted">
         Data source: Open-Meteo (ERA5)
