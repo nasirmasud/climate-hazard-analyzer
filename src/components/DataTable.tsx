@@ -11,6 +11,7 @@
  */
 
 import { getExportCsvUrl } from '../api'
+import { printReport } from '../printReport'
 import type { AnalysisParams, YearlyOut } from '../types'
 
 interface Props {
@@ -72,13 +73,22 @@ export function DataTable({ yearly, downloadParams }: Props) {
              to revoke. The `download` attribute is only a hint — the
              Content-Disposition header on the response is what actually names
              the file. */
-          <a
-            href={getExportCsvUrl(downloadParams)}
-            download
-            className="rounded border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:bg-surface"
-          >
-            Download CSV
-          </a>
+          <div className="flex items-center gap-2 print:hidden">
+            <button
+              type="button"
+              onClick={() => printReport(downloadParams)}
+              className="rounded border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:bg-surface"
+            >
+              Save as PDF
+            </button>
+            <a
+              href={getExportCsvUrl(downloadParams)}
+              download
+              className="rounded border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:bg-surface"
+            >
+              Download CSV
+            </a>
+          </div>
         )}
       </div>
 
