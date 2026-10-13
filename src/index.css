@@ -25,3 +25,95 @@ body {
   font-family: Inter, 'Segoe UI', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/*
+ * Printing.
+ *
+ * The page is a dashboard, and a dashboard prints badly without help: the input
+ * controls and the map are meaningless on paper, the yearly table is capped at a
+ * screen-height scroll box so most of it is silently cut off, and the chart is
+ * measured in pixels against the screen width rather than the page width.
+ *
+ * Element-level show/hide is handled with Tailwind's `print:` variant where the
+ * component owns the element. What is left here is the work that has to be CSS
+ * to be correct: the table's scroll cap, the chart's sizing, colour fidelity and
+ * page breaks.
+ */
+@media print {
+  /* Heat and trend colours are the only thing distinguishing the two series, so
+     they have to survive the printer. Browsers strip backgrounds by default to
+     save ink, which would leave the trend line indistinguishable from the
+     points. */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Drop the screen background so the page does not print as a coloured block
+     covering the margins. */
+  body {
+    background: #fff;
+  }
+
+  /* The dashboard's cards are a screen layout, not a document layout. Without
+     this they print as one very tall narrow column of narrow boxes. */
+  main {
+    max-width: none;
+    padding: 0;
+  }
+
+  /* The yearly table's scroll container. `max-h-96 overflow-auto` is a screen
+     affordance: on paper it silently clips everything below the fold, so a
+     30-year analysis would export 5 rows and look complete. */
+  .max-h-96 {
+    max-height: none;
+    overflow: visible;
+  }
+
+  /* The sticky header would otherwise overlap the first rows, because sticky
+     positioning is computed against the viewport and the printed page has
+     several of them. */
+  thead {
+    position: static;
+  }
+
+  /* Recharts measures its container in pixels at mount, so the SVG is sized for
+     the screen width and would be cut off at the paper width. The SVG carries a
+     viewBox, so scaling it to the page preserves its aspect ratio and its line
+     widths rather than distorting them. */
+  .recharts-wrapper,
+  .recharts-surface {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .recharts-wrapper {
+    height: auto !important;
+  }
+
+  /* Keep a card whole rather than letting it split across a page boundary. A
+     chart cut in half is unreadable, and a table row split across two pages
+     reads as two different rows. */
+  .recharts-wrapper,
+  table,
+  tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* The grid becomes a stack, since a three-column layout wastes a portrait
+     page and leaves each column too narrow for its numbers. */
+  .lg\:grid-cols-3 {
+    display: block;
+  }
+
+  .lg\:col-span-2 {
+    width: auto;
+  }
+
+  /* Give the long table somewhere to continue from, since it cannot fit on one
+     page. */
+  thead {
+    display: table-header-group;
+  }
+}
