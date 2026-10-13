@@ -198,6 +198,18 @@ class HealthOut(BaseModel):
     status: str
 
 
+class PlaceNameOut(BaseModel):
+    """
+    A short name for a coordinate, or null when none could be found.
+
+    Null is a normal, expected outcome: open water, unpopulated land, a lookup
+    that timed out, or a rate limit. The frontend treats it as "use the plain
+    label", so it is never an error.
+    """
+
+    name: str | None = None
+
+
 class ParamsOut(BaseModel):
     start_year: int
     end_year: int
