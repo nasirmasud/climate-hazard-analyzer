@@ -91,14 +91,21 @@ function App() {
 
       {data && (
         <>
-          <div className="mb-4 grid gap-4 lg:grid-cols-3">
+          {/* `[&>*]:min-w-0` matters more than it looks. A grid item's automatic
+              minimum size is its content's min-content width, so an item cannot
+              shrink below what it contains. The yearly table's seven columns make
+              that width larger than a phone viewport, which forced the whole row
+              wider than the screen and took all three cards with it. Letting the
+              items shrink lets the table's own scroll container do the work it
+              was already written for. */}
+          <div className="mb-4 grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
             <div className="lg:col-span-2">
               <FrequencyChart data={data} />
             </div>
             <RegionPanel data={data} />
           </div>
 
-          <div className="mb-4 grid gap-4 lg:grid-cols-3">
+          <div className="mb-4 grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
             <InsightsPanel data={data} />
             <div className="space-y-4">
               <TrendCard data={data} />
