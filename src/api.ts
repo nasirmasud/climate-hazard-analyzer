@@ -26,9 +26,10 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string): Promise<T> {
+async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
     headers: { Accept: 'application/json' },
+    signal,
   })
 
   if (!response.ok) {
@@ -85,6 +86,21 @@ export function getHealth() {
 
 export function getRegions() {
   return request<PresetRegion[]>('/api/regions')
+}
+
+/**
+ * A short name for a coordinate, or null.
+ *
+ * Reverse geocoding is a nicety, so this is allowed to fail: the caller treats
+ * a null as "use the plain label". `signal` lets a stale lookup be abandoned
+ * when the user has already clicked somewhere else.
+ */
+export function getPlaceName(lat: number, lon: number, signal?: AbortSignal) {
+  const query = new URLSearchParams({ lat: String(lat), lon: String(lon) })
+
+  return request<{ name: string | null }>(`/api/place-name?${query}`, signal).then(
+    (body) => body.name ?? null,
+  )
 }
 
 export function getAnalysis(params: AnalysisParams) {
