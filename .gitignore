@@ -12,6 +12,9 @@ venv/
 htmlcov/
 *.egg-info/
 
+# Tests — run locally with `pytest`, kept out of the repository
+tests/
+
 # Editors / OS
 .vscode/
 .idea/
