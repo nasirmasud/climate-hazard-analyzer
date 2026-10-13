@@ -77,24 +77,35 @@ body {
     position: static;
   }
 
-  /* Recharts measures its container in pixels at mount, so the SVG is sized for
-     the screen width and would be cut off at the paper width. The SVG carries a
-     viewBox, so scaling it to the page preserves its aspect ratio and its line
-     widths rather than distorting them. */
-  .recharts-wrapper,
-  .recharts-surface {
+  /* The chart.
+     Recharts puts its chart inside a zero-width inner div and escapes it with
+     explicit pixel sizing on `.recharts-wrapper`. Overriding that wrapper with
+     `width: 100%` therefore resolves the percentage against a zero-width parent
+     and collapses the chart to nothing, so the whole chain has to become
+     percentage-based for print rather than just the wrapper.
+
+     The SVG keeps its viewBox, so scaling it to the page width preserves both
+     the aspect ratio and the stroke widths instead of stretching them. */
+  .recharts-responsive-container,
+  .recharts-responsive-container > div,
+  .recharts-wrapper {
     width: 100% !important;
-    max-width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
-  .recharts-wrapper {
+  .recharts-surface {
+    width: 100% !important;
     height: auto !important;
   }
 
   /* Keep a card whole rather than letting it split across a page boundary. A
      chart cut in half is unreadable, and a table row split across two pages
-     reads as two different rows. */
-  .recharts-wrapper,
+     reads as two different rows. The break goes on the responsive container
+     rather than the wrapper, because the wrapper is height:auto here and so no
+     longer describes the chart's real box. */
+  .recharts-responsive-container,
   table,
   tr {
     break-inside: avoid;
