@@ -33,16 +33,6 @@ def error_response(status_code: int, code: str, message: str) -> JSONResponse:
     )
 
 
-def _is_local(origin: str) -> bool:
-    """True when an origin points at this machine.
-
-    Used to decide whether development conveniences apply. A deployed frontend
-    is a real hostname, so this is False there and none of the local allowances
-    are enabled.
-    """
-    return origin.startswith("http://localhost") or origin.startswith("http://127.0.0.1")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Create the cache indexes once, at boot, and close the pool on shutdown.
@@ -65,8 +55,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# The deployed frontend, always.
-allowed_origins = {settings.frontend_origin}
+# The deployed frontends, always. `frontend_origins` splits a comma-separated
+# FRONTEND_ORIGIN, because reading the raw string as one allowlist entry silently
+# matched nothing at all and every browser request was rejected.
+#
+# Named rather than kept local so tests can assert what was actually configured
+# instead of inferring it from a .env file that is deliberately not committed.
+_allowed = set(settings.frontend_origins)
 
 # In development, allow any localhost port rather than a fixed 5173.
 #
@@ -77,17 +72,24 @@ allowed_origins = {settings.frontend_origin}
 # because opening the API URL in a tab still works — a direct navigation sends
 # no Origin header, so CORS never applies to it.
 #
-# This only applies when the configured frontend is itself local, so a deployed
-# instance still refuses every origin except the real one. A deployed app is
-# public, and allowing localhost there would let any page running on a user's
-# machine read its responses.
-if _is_local(settings.frontend_origin):
-    allowed_origins |= {f"http://localhost:{port}" for port in range(5173, 5192)}
-    allowed_origins |= {f"http://127.0.0.1:{port}" for port in range(5173, 5192)}
+# This only applies when every configured frontend origin is itself local, so a
+# deployed instance still refuses every origin except the real ones. A deployed
+# app is public, and allowing localhost there would let any page running on a
+# user's machine read its responses.
+#
+# The trade-off is worth stating plainly, because it surprises people: listing a
+# deployed origin alongside a local one on the same instance switches the sweep
+# off. A developer running both against one backend therefore has to name the
+# exact port they use.
+if settings.has_local_frontend:
+    _allowed |= {f"http://localhost:{port}" for port in range(5173, 5192)}
+    _allowed |= {f"http://127.0.0.1:{port}" for port in range(5173, 5192)}
+
+ALLOWED_ORIGINS = sorted(_allowed)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=sorted(allowed_origins),
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET"],
     allow_headers=["*"],
