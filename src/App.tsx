@@ -66,7 +66,7 @@ function App() {
         <p className="mt-1 text-sm text-ink-muted">
           Historical heatwave trends from Open-Meteo (ERA5) daily temperature data.
         </p>
-        <p className="mt-2 text-xs text-ink-muted">{backendLabel}</p>
+        <p className="mt-2 text-xs text-ink-muted print:hidden">{backendLabel}</p>
       </header>
 
       <ControlBar
