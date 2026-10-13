@@ -15,6 +15,12 @@ dist-ssr
 # Local environment
 .env
 
+# Tests — run locally with `npm test`, kept out of the repository.
+# These live beside the modules they cover rather than in a tests/ folder, so
+# they are matched by name instead of by directory.
+*.test.ts
+*.test.tsx
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
