@@ -23,12 +23,12 @@ The backend repository is separate: <https://github.com/nasirmasud/climate-trend
 
 ## Scripts
 
-| Command | Purpose |
-|---|---|
-| `npm run dev` | Dev server on <http://localhost:5173> |
-| `npm run build` | Type-check with `tsc` then build to `dist/` |
-| `npm run lint` | ESLint |
-| `npm run format` | Prettier |
+| Command          | Purpose                                     |
+| ---------------- | ------------------------------------------- |
+| `npm run dev`    | Dev server on <http://localhost:5173>       |
+| `npm run build`  | Type-check with `tsc` then build to `dist/` |
+| `npm run lint`   | ESLint                                      |
+| `npm run format` | Prettier                                    |
 
 ## How this connects to the backend
 
