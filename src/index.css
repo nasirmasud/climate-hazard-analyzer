@@ -1,5 +1,10 @@
 @import 'tailwindcss';
 
+/* Leaflet ships its own stylesheet, which positions the map panes, the tile
+   layer and the attribution control. Without it the map renders unstyled. It
+   has to come before the Tailwind layer so our theme can override it. */
+@import 'leaflet/dist/leaflet.css';
+
 /* One warm accent for heat, one cool accent for the trend line. Nothing else
    carries meaning by colour alone, per the visual design rules. */
 @theme {
