@@ -2,29 +2,19 @@
 
 Two collections, for two different jobs:
 
-* **`daily_temps`** holds the cleaned daily series for a location. It is keyed
-  by coordinates alone, so it is reusable across *any* year range the user later
-  asks for. This is the collection that stops a second request for the same
-  city calling Open-Meteo again.
+* **`daily_temps`** holds a location's cleaned daily series, keyed by coordinates
+  alone so it is reusable across *any* year range. This is what stops a second
+  request for the same city from calling Open-Meteo again.
 * **`analyses`** holds a finished response body for one exact set of parameters.
-  It is keyed by location, range, hazard and logic version.
 
-The order of the read path is what makes the cache cheap:
+The read path is ordered so the cache is cheap: `analyses`, then `daily_temps`,
+and only then Open-Meteo. A new year range for a city we already hold costs one
+document read and no upstream call.
 
-1. look in `analyses` for this exact request — a hit returns the stored body
-2. otherwise look in `daily_temps` for the location's full series
-3. only if that misses, call Open-Meteo, and store what comes back
-
-So a new year range for a city we already have data for costs one document read
-and no upstream call at all.
-
-Every pymongo call here is blocking, and every one is awaited through
-`run_in_threadpool` by the caller. This project uses pymongo only — never motor
-— so there is exactly one style to explain.
-
-A stale or missing collection is never fatal: if MongoDB is unreachable the
-app still answers, just by recomputing. A cache outage should degrade
-performance, not availability.
+Every pymongo call here is blocking and awaited through `run_in_threadpool` by
+the caller. This project uses pymongo only, never motor, so there is exactly one
+style to explain. A cache outage is never fatal: if MongoDB is unreachable the
+app still answers, just by recomputing.
 """
 
 import asyncio
@@ -49,19 +39,16 @@ DAILY_COLLECTION = "daily_temps"
 ANALYSES_COLLECTION = "analyses"
 
 # An analysis is cheap to recompute and expensive to store forever, so stored
-# bodies expire. Thirty days also means a user returning after a month gets
-# fresh upstream data rather than a result frozen at the last visit. (D5)
+# bodies expire. Thirty days also means a user returning after a month gets fresh
+# upstream data rather than a result frozen at their last visit.
 ANALYSIS_TTL_DAYS = 30
 
-# The daily series outlives the analyses built from it, because one fetch
-# serves every year range a user might ask for. Ninety days bounds how stale
-# the upstream data can be without making anyone pay for a refetch inside a
-# season. (D6)
+# The daily series outlives the analyses built from it, because one fetch serves
+# every year range a user might ask for. Ninety days bounds how stale the
+# upstream data can be without making anyone pay for a refetch inside a season.
 #
-# The two TTLs are deliberately different. An analysis is a finished answer to
-# one question; the series is the evidence behind many answers. Refreshing the
-# evidence on a shorter cycle would penalise every returning user for a
-# correction most of them will never notice.
+# The two TTLs are deliberately different: an analysis is a finished answer to
+# one question, the series is the evidence behind many answers.
 SERIES_TTL_DAYS = 90
 
 # Place names barely change, so they are cached far longer than anything else.
@@ -79,8 +66,8 @@ _client: MongoClient | None = None
 def get_client() -> MongoClient | None:
     """The shared client, or None when no URI is configured.
 
-    A single client is reused for the process lifetime, because MongoClient
-    maintains its own connection pool and is documented as thread-safe.
+    One client is reused for the process lifetime, because MongoClient maintains
+    its own connection pool and is documented as thread-safe.
     """
     global _client
 
@@ -173,10 +160,10 @@ def ensure_indexes() -> None:
         return
 
     try:
-        # _id is indexed automatically and uniquely. fetched_at carries a TTL,
-        # so a series older than 90 days is dropped and the next request for
-        # that location refetches it. This is also what keeps a corrected
-        # upstream dataset from being served indefinitely.
+        # _id is indexed automatically and uniquely. fetched_at carries a TTL, so
+        # a series older than 90 days is dropped and the next request refetches
+        # it, which is what stops a corrected upstream dataset being served
+        # indefinitely.
         daily.create_index(
             [("fetched_at", ASCENDING)],
             name="fetched_at_ttl",
@@ -220,12 +207,11 @@ def _utcnow() -> datetime:
 
 
 def series_to_document(series: pd.DataFrame, quality: QualitySummary) -> dict[str, Any]:
-    """Turn the cleaned frame into a storable document (section 10.2).
+    """Turn the cleaned frame into a storable document.
 
-    The frame is stored as three parallel arrays rather than as nested objects.
-    MongoDB documents have a 16 MB limit and BSON field-name overhead is
-    significant, so for 13,000 days the flat arrays are both smaller and much
-    cheaper to decode back into a DataFrame.
+    Three parallel arrays rather than nested objects: MongoDB documents have a
+    16 MB limit and BSON field-name overhead is significant, so for 13,000 days
+    the flat arrays are both smaller and much cheaper to decode into a DataFrame.
     """
     index = series.index
     values = series[TMAX_COLUMN]
@@ -258,10 +244,9 @@ def series_to_document(series: pd.DataFrame, quality: QualitySummary) -> dict[st
 def document_to_series(document: dict[str, Any]) -> pd.DataFrame:
     """Rebuild the cleaned frame from a stored document.
 
-    The result is the same shape `ingest.clean_series` returns, so everything
-    downstream is identical whether the data came from the network or the
-    cache. If the code paths differed, a cached result could disagree with a
-    fresh one, which would be very hard to debug.
+    The result matches `ingest.clean_series`, so everything downstream is
+    identical whether the data came from the network or the cache. Divergent
+    paths would let a cached result disagree with a fresh one.
     """
     index = pd.to_datetime(pd.Index(document["dates"]), format="%Y-%m-%d")
     values = [np.nan if v is None else float(v) for v in document["tmax"]]
@@ -406,12 +391,10 @@ def store_analysis(key: str, result: dict[str, Any]) -> None:
 # One lock per cache key, so two users who both ask for cold Dhaka at the same
 # moment produce one upstream call rather than two.
 #
-# Each entry carries a waiter count alongside the lock. The count matters: a
-# lock can be *unlocked* while another coroutine is still queued behind it, and
-# dropping the entry at that moment would let a third caller create a fresh
-# lock and run concurrently with the queued one. That would silently break the
-# single-flight guarantee, so the entry is only removed once the last holder
-# *and* the last waiter are gone.
+# Each entry carries a waiter count alongside the lock, because a lock can be
+# *unlocked* while another coroutine is still queued behind it. Dropping the entry
+# at that moment would let a third caller create a fresh lock and run
+# concurrently with the queued one, silently breaking single-flight.
 _locks: dict[str, tuple[asyncio.Lock, list[int]]] = {}
 
 
@@ -453,8 +436,8 @@ def clear_locks() -> None:
 async def run_in_pool(func, *args):
     """Run a blocking helper in the threadpool.
 
-    `run_in_pool` is the single entry point for blocking work from async code,
-    so there is exactly one style to explain and no route can accidentally call
-    pymongo on the event loop.
+    The single entry point for blocking work from async code, so there is exactly
+    one style to explain and no route can accidentally call pymongo on the event
+    loop.
     """
     return await run_in_threadpool(func, *args)

@@ -1,18 +1,14 @@
 """Plain-language insight sentences, generated from the numbers.
 
-Every sentence here is assembled from values the API already computed. Nothing
-is written that the response does not support, and no template fills in a
-number it has not been given. That is what keeps the cards, chart, insights and
-table telling the same story.
-
-Wording is deliberately hedged. These are reanalysis grid cells, not
-measurements at a person's street, so the text describes what the data shows
-without claiming to have found a cause.
+Every sentence is assembled from values the API already computed, so the cards,
+chart, insights and table cannot tell different stories. Wording is deliberately
+hedged: these are reanalysis grid cells, not measurements at a person's street,
+so the text describes what the data shows without claiming to have found a cause.
 """
 
 from . import trends
 
-# Section 8.9: always shown, on every response, not only when a trend exists.
+# Always shown, on every response, not only when a trend exists.
 LIMITATIONS = [
     "Data comes from ERA5 reanalysis, a modelled gridded estimate rather than "
     "on-site measurement.",
@@ -45,9 +41,8 @@ def build_insights(
 def _frequency_sentence(trend: dict) -> list[str]:
     """The headline sentence, only when the test supports a direction.
 
-    A non-significant series gets the "no clear trend" wording instead of a
-    direction. Reporting "increasing" here would be the single easiest way to
-    overstate this data.
+    A non-significant series gets the "no clear trend" wording instead, which is
+    the easiest way to avoid overstating this data.
     """
     direction = trend["direction"]
     p_value = trend["mann_kendall_p"]
@@ -97,11 +92,9 @@ def _excluded_years_sentence(low_quality_years: list[int]) -> list[str]:
 
     years = ", ".join(str(year) for year in low_quality_years)
 
-    # The wording matters. These years are no longer merely marked: they are
-    # excluded from the trend tests, the fitted line and the period comparison.
-    # Saying they are "included in these results" would be true of the event
-    # counts and false of everything the trend is built from, and a reader
-    # deciding whether to trust the trend would be misled by the softer claim.
+    # These years are excluded from the trend tests, the fitted line and the
+    # period comparison, not merely flagged, so softer wording would mislead a
+    # reader deciding whether to trust the trend.
     return [
         f"{len(low_quality_years)} year(s) had more than 5% of days missing "
         f"({years}). They are excluded from the trend test and the period "
@@ -112,10 +105,9 @@ def _excluded_years_sentence(low_quality_years: list[int]) -> list[str]:
 def _rate_sentence(periods: dict) -> list[str]:
     """Compare events per year between the two periods.
 
-    The percentage is only shown when the earlier period has enough events for
-    the ratio to mean something. Going from 0.1 to 0.2 events a year is a 100%
-    increase that describes nothing, so below roughly one event a year the
-    absolute numbers are reported instead and no percentage appears.
+    0.1 to 0.2 events a year is a 100% increase that describes nothing, so below
+    roughly one event a year the absolute numbers are reported instead and no
+    percentage appears.
     """
     early = periods.get("early") or {}
     late = periods.get("late") or {}

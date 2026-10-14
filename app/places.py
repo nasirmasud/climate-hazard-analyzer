@@ -1,25 +1,21 @@
 """Reverse geocoding a clicked point into a short place name.
 
-The map sets a box rather than a single named place, so without this the
-Location dropdown could only ever say "Custom area". A short name makes the
-selection readable, and it comes from OpenStreetMap Nominatim, which needs no
-API key.
+The map sets a box rather than a named place, so without this the dropdown could
+only ever say "Custom area". Names come from OpenStreetMap Nominatim, which needs
+no API key.
 
-Three rules shape this module, all of them about not breaking the page:
+Three rules shape this module, all about not breaking the page:
 
-1. **Never raise.** Every failure path returns `None`, which the frontend reads
-   as "no name" and renders as the plain fallback label. A lookup that fails must
-   not disturb the four coordinate inputs or block an analysis.
-2. **Never be slow.** The request has a short timeout and is not awaited by
-   anything the user is waiting on. The coordinates fill in immediately; the name
-   arrives afterwards, if at all.
+1. **Never raise.** Every failure returns `None`, which the frontend renders as
+   the plain fallback label.
+2. **Never be slow.** A short timeout, and not awaited by anything the user is
+   waiting on: the coordinates fill in immediately, the name arrives later or not
+   at all.
 3. **Never leak coordinates.** The label is built only from Nominatim's own
-   address fields. There is no branch anywhere that falls back to printing
-   "23.81, 90.41" as if that were a place name.
+   address fields; no branch falls back to printing coordinates as a name.
 
-The call goes through the backend rather than the browser so that it inherits
-the existing rate limiting and Mongo cache: repeated clicks on the same spot
-cost nothing, and Nominatim's usage policy is respected in one place.
+The call goes through the backend rather than the browser, so it inherits the
+existing rate limiting and Mongo cache.
 """
 
 import logging
@@ -33,9 +29,9 @@ logger = logging.getLogger("climate")
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse"
 
-# Nominatim's usage policy requires an identifying User-Agent and a maximum of
-# one request per second. The timeout is deliberately short: a slow lookup is
-# worth less than a prompt fallback.
+# Nominatim's usage policy requires an identifying User-Agent and at most one
+# request per second. The timeout is deliberately short: a slow lookup is worth
+# less than a prompt fallback.
 REQUEST_TIMEOUT_SECONDS = 3.0
 
 # Place names change rarely, so they are cached for far longer than analyses.
@@ -43,9 +39,8 @@ PLACE_TTL_DAYS = 180
 
 PLACE_COLLECTION = "place_names"
 
-# Nominatim's own field priority, most specific first. Cities are the common
-# case, but a click on open country has no city, so the chain has to fall
-# through to progressively smaller settlements before giving up.
+# Nominatim's own field priority, most specific first. A click on open country
+# has no city, so the chain falls through to progressively smaller settlements.
 NAME_KEYS = (
     "city",
     "town",
@@ -62,11 +57,9 @@ USER_AGENT = "climate-trend-analyzer/1.0 (heatmap trend analysis demo)"
 def short_place_name(payload: Any) -> str | None:
     """Turn a Nominatim reverse response into "Dhaka, Bangladesh".
 
-    Returns None when nothing usable is present, which is the caller's signal to
-    use the plain fallback label.
-
-    Deliberately takes the parsed payload rather than doing the request, so this
-    is a pure function and can be tested against real captured responses.
+    None means nothing usable was present, which is the caller's signal to use the
+    plain fallback label. Takes the parsed payload rather than doing the request,
+    so it stays pure and testable against captured responses.
     """
     if not isinstance(payload, dict):
         return None
@@ -106,12 +99,11 @@ def build_query(lat: float, lon: float) -> dict[str, str]:
 
     Coordinates arrive already validated and bounded, so they are safe to
     interpolate. `zoom=10` asks for a settlement rather than a full street
-    address, which is what "short form" means here.
+    address.
 
-    `accept-language=en` matters more than it looks. Without it Nominatim replies
-    in the local language, and Dhaka comes back as "ঢাকা, বাংলাদেশ" rather than
-    the "Dhaka, Bangladesh" the dropdown is meant to read. The response is still
-    valid JSON either way, so the bug is silent — it just looks wrong.
+    `accept-language=en` matters more than it looks: without it Nominatim replies
+    in the local language and Dhaka comes back in a local script. The response is
+    still valid JSON, so the bug is silent — it just looks wrong.
     """
     return {
         "lat": f"{lat}",
@@ -173,23 +165,19 @@ def store(lat: float, lon: float, name: str) -> None:
 async def lookup_place_name(lat: float, lon: float, client_key: str) -> str | None:
     """The short name for a point, or None.
 
-    `client_key` identifies the caller for rate limiting. It is passed in rather
-    than derived here, so there is one definition of "who is this" in the whole
-    codebase.
+    `client_key` identifies the caller for rate limiting and is passed in rather
+    than derived here, so there is one definition of "who is this" in the codebase.
 
-    Checks the cache first, then the rate budget, then the network.
-
-    **The whole body is wrapped.** The invariant is that this function never
-    raises, and individual guards are not enough to guarantee it: a helper can be
-    swapped out, and a cache write failing after a successful lookup must not turn
-    a nice-to-have into a 500. One outer guard makes the guarantee structural
-    rather than a property of each call site.
+    **The whole body is wrapped.** Individual guards are not enough to guarantee
+    the never-raises invariant: a cache write failing after a successful lookup
+    must not turn a nice-to-have into a 500. One outer guard makes the guarantee
+    structural rather than a property of each call site.
     """
     try:
         return await _lookup(lat, lon, client_key)
     except Exception as exc:
-        # Anything at all: an unexpected driver error, a bug in the extraction,
-        # a timeout escaping from a helper. The caller's fallback covers it.
+        # Anything at all: a driver error, a bug in the extraction, a timeout
+        # escaping from a helper. The caller's fallback covers it.
         logger.warning("Place-name lookup failed for %s/%s: %s", lat, lon, exc)
         return None
 

@@ -1,12 +1,9 @@
 """Fetch and clean daily maximum temperature from Open-Meteo (ERA5).
 
-The brief (section 6) fixes this module's behaviour exactly:
-
-* one request per location, covering 1990-01-01 to the end of the last complete
-  calendar year, which is the full supported range;
-* retries on network errors and 5xx only, never on 4xx, because a 4xx means the
-  request itself is wrong and repeating it cannot help;
-* cleaning in a fixed order, ending with long gaps left as NaN.
+One request per location covers the full supported range, 1990-01-01 to the end
+of the last complete year. Retries happen on network errors and 5xx only, never
+on 4xx, because a 4xx means the request itself is wrong and repeating it cannot
+help.
 
 Long gaps are never filled with zeros or means. Inventing a temperature would
 let a fabricated day influence a heatwave event, which is worse than admitting
@@ -27,29 +24,27 @@ logger = logging.getLogger("climate")
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 
-# The brief's section 6.4 suggests a 30 second timeout. The whole request is
-# ~13,000 daily values, so this is generous.
+# ~13,000 daily values in one request, so 30s is generous.
 REQUEST_TIMEOUT_SECONDS = 30.0
 
 MAX_ATTEMPTS = 3
 BACKOFF_BASE_SECONDS = 0.5
 
-# Section 6.6 step 2: anything outside this cannot be a real daily maximum
-# temperature anywhere on Earth, so it is a data error rather than a heatwave.
+# Outside this range cannot be a real daily maximum anywhere on Earth, so it is
+# a data error rather than a heatwave.
 MAX_PLAUSIBLE_C = 60.0
 MIN_PLAUSIBLE_C = -60.0
 
-# Section 6.6 step 4: gaps this short are interpolated, longer ones are not.
+# Gaps this short are interpolated; longer ones are not.
 MAX_INTERPOLATED_GAP_DAYS = 2
 
-# Section 6.7: a year with more than this share of days still missing is
-# flagged low quality and is excluded from trend tests in Phase 4.
+# A year with more than this share of days still missing is flagged low quality.
 LOW_QUALITY_MISSING_FRACTION = 0.05
 
 TMAX_COLUMN = "tmax"
 INTERPOLATED_COLUMN = "interpolated"
 
-# The response only asks for daily=temperature_2m_max, so one column is expected.
+# Only this one daily variable is ever requested.
 DAILY_VARIABLE = "temperature_2m_max"
 
 
@@ -63,7 +58,7 @@ class UpstreamError(RuntimeError):
 
 @dataclass(frozen=True)
 class QualitySummary:
-    """Section 6.7. Describes how much of the series is real and how much is not."""
+    """How much of the series is real and how much is not."""
 
     total_days: int
     missing_days: int
@@ -84,11 +79,10 @@ def fetch_period() -> tuple[str, str]:
 
 
 def build_query(lat: float, lon: float) -> dict[str, str]:
-    """Section 6.2.
+    """Build the Open-Meteo query for one location.
 
-    Coordinates arrive already validated by Pydantic and rounded to two
-    decimals by the request model, so they are safe to interpolate into a query
-    string as floats. Units are left at the Open-Meteo default of Celsius.
+    Coordinates arrive already validated and rounded to two decimals, so they are
+    safe to interpolate as floats. Units are left at the Open-Meteo default, C.
     """
     start_date, end_date = fetch_period()
     return {
@@ -97,8 +91,8 @@ def build_query(lat: float, lon: float) -> dict[str, str]:
         "start_date": start_date,
         "end_date": end_date,
         "daily": DAILY_VARIABLE,
-        # The brief asks for this: it pins the timestamps to the location's own
-        # local day rather than UTC, so a day means the same thing for the user.
+        # Pins timestamps to the location's own local day rather than UTC, so a
+        # day means the same thing to the user.
         "timezone": "auto",
     }
 
@@ -155,10 +149,10 @@ async def _get_with_retries(client: httpx.AsyncClient, params: dict[str, str]) -
 
 
 def parse_daily(payload: dict) -> pd.DataFrame:
-    """Section 6.5: `daily.time` and `daily.temperature_2m_max` into one column.
+    """Parse `daily.time` and `daily.temperature_2m_max` into one column.
 
-    Raises UpstreamError if the response does not look like the daily payload
-    we asked for, rather than failing later with a confusing KeyError.
+    Raises UpstreamError if the response does not look like the daily payload we
+    asked for, rather than failing later with a confusing KeyError.
     """
     daily = payload.get("daily")
     if not isinstance(daily, dict):
@@ -178,15 +172,15 @@ def parse_daily(payload: dict) -> pd.DataFrame:
 
 
 def clean_series(raw: pd.DataFrame) -> pd.DataFrame:
-    """Section 6.6, in the order the brief gives.
+    """Clean the raw frame, in a fixed order.
 
-    Returns a frame with two columns: `tmax` and `interpolated` (a boolean
-    saying whether that day's value was filled in rather than observed).
+    Returns a frame with two columns: `tmax` and `interpolated` (whether that
+    day's value was filled in rather than observed).
     """
     frame = raw.copy()
 
-    # 1. Nulls become NaN. to_numeric already did this, but an explicit pass
-    #    keeps the step visible and covers values like "" or "null".
+    # 1. Nulls to NaN. to_numeric already did this; the pass also catches ""
+    #    and "null", and keeps the step visible.
     frame[TMAX_COLUMN] = pd.to_numeric(frame[TMAX_COLUMN], errors="coerce")
 
     # 2. Physically impossible values are data errors, not extreme heat.
@@ -207,12 +201,10 @@ def clean_series(raw: pd.DataFrame) -> pd.DataFrame:
 
     # 4. Linear interpolation, but only across short gaps.
     #
-    #    pandas' own `limit` argument cannot express this rule. It fills the
-    #    first N NaNs of *every* gap, so a 7 day hole with limit=2 would have
-    #    two days invented in it and still look "interpolated". The brief is
-    #    stricter: a gap is either short enough to fill entirely or left
-    #    completely alone. So the run length of each NaN block is measured here
-    #    and the whole block is kept or dropped as a unit.
+    #    pandas' `limit` cannot express this rule: it fills the first N NaNs of
+    #    *every* gap, so a 7 day hole with limit=2 would gain two invented days
+    #    and still look interpolated. A gap is instead kept or dropped whole, by
+    #    measuring each NaN block's run length.
     missing = frame[TMAX_COLUMN].isna()
 
     # A new block starts wherever the missing/not-missing pattern changes.
@@ -222,9 +214,9 @@ def clean_series(raw: pd.DataFrame) -> pd.DataFrame:
 
     short_gap = missing & (block_length <= MAX_INTERPOLATED_GAP_DAYS)
 
-    # Interpolate the interior of the series, then put back every NaN that
-    # belongs to a long gap. limit_area="inside" refuses to extrapolate past
-    # the first and last real values, so no day outside the data is invented.
+    # Interpolate the interior, then restore every NaN in a long gap. limit_area
+    # refuses to extrapolate past the first and last real values, so no day
+    # outside the data is invented.
     interpolated_all = frame[TMAX_COLUMN].interpolate(
         method="linear",
         limit_area="inside",
@@ -232,17 +224,17 @@ def clean_series(raw: pd.DataFrame) -> pd.DataFrame:
     keep_missing = missing & ~short_gap
     frame[TMAX_COLUMN] = interpolated_all.mask(keep_missing)
 
-    # 5. Anything still NaN stays NaN. It is never replaced with zero or a mean.
+    # 5. Anything still NaN stays NaN, never zero or a mean.
     frame[INTERPOLATED_COLUMN] = missing & ~keep_missing
 
     return frame
 
 
 def summarize_quality(frame: pd.DataFrame) -> QualitySummary:
-    """Section 6.7: how much of the series is real.
+    """How much of the series is real.
 
-    `missing_days` counts days that are *still* missing after cleaning, so
-    interpolated days are not double-counted as missing.
+    `missing_days` counts days *still* missing after cleaning, so interpolated
+    days are not double-counted as missing.
     """
     total_days = int(len(frame))
     interpolated_days = int(frame[INTERPOLATED_COLUMN].sum())
@@ -267,9 +259,8 @@ def summarize_quality(frame: pd.DataFrame) -> QualitySummary:
 async def fetch_daily_temps(lat: float, lon: float) -> tuple[pd.DataFrame, QualitySummary]:
     """The full ingest path: one upstream call, then parse, clean and summarise.
 
-    Returns the cleaned series and its quality summary. The caller is
-    responsible for running this off the event loop, because the pandas work is
-    CPU-bound.
+    Returns the cleaned series and its quality summary. The caller must run this
+    off the event loop, because the pandas work is CPU-bound.
     """
     params = build_query(lat, lon)
 

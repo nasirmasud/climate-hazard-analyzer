@@ -1,22 +1,16 @@
 """Trend analysis on yearly heatwave counts.
 
-Two independent tests are run on the same series, and they are used for
-different jobs:
+**Mann-Kendall** decides the headline. It is rank-based, so it is robust to the
+spikes and dips event counts always have, and it answers "is there a consistent
+direction?" with a p-value. Sen's slope, its measure of size, is the median of
+every pairwise slope, so it ignores outliers too.
 
-* **Mann-Kendall** (`pymannkendall.original_test`) decides the headline. It is
-  a rank-based test: it compares every year against every other year and asks
-  whether they mostly agree on the order, which makes it robust to the spikes
-  and dips that event counts always have. It answers "is there a consistent
-  direction?" and gives a p-value, plus Sen's slope as the size of the change.
-  Sen's slope is the median of every pairwise slope, which again ignores
-  outliers.
-* **Linear regression** (`scipy.stats.linregress`) is only used to draw a trend
-  line. Least squares is pulled around by a single extreme year, so it does
-  not decide the label, only the line the chart shows.
+**Linear regression** only draws the trend line. Least squares is pulled around
+by a single extreme year, so it does not decide the label.
 
 The Mann-Kendall p-value alone decides the direction, at p < 0.05. A series can
-have a positive slope and no significant trend, and in that case saying
-"increasing" would be overstating what 30 years of noisy counts can support.
+have a positive slope and no significant trend, and saying "increasing" then
+would be overstating what 30 years of noisy counts can support.
 """
 
 import logging
@@ -37,10 +31,9 @@ DIRECTION_NONE = "no_clear_trend"
 def _finite(value: float, fallback: float = 0.0) -> float:
     """Replace NaN and infinity with a usable number.
 
-    A constant series has no variance, so linregress returns NaN for its
-    p-value and correlation. JSON has no NaN literal either, so a NaN leaking
-    into the response would produce a body no browser can parse. Substituting
-    zero keeps the "nothing measurable" case honest.
+    A constant series has no variance, so linregress returns NaN, and JSON has no
+    NaN literal either. Substituting zero keeps the "nothing measurable" case
+    honest and parseable.
     """
     return float(value) if np.isfinite(value) else fallback
 
@@ -48,23 +41,19 @@ def _finite(value: float, fallback: float = 0.0) -> float:
 def analyse_trend(yearly: list[dict]) -> dict:
     """Run both tests on the yearly event counts, excluding low-quality years.
 
-    A year with more than 5 percent of its days still missing has an event count
-    built on an unknown amount of data. A count that is too low because the data
-    is missing is not evidence that fewer heatwaves happened, so including it
-    would drag both tests toward a spurious "no clear trend" and could even
-    reverse the direction. Section 8.4 allows these years to be excluded rather
-    than merely marked, and that is the stricter, more honest reading.
+    A year with over 5 percent of its days missing has a count built on an
+    unknown amount of data, and a count that is low only because data is missing
+    is not evidence that fewer heatwaves happened. Including such years would
+    drag both tests toward a spurious "no clear trend" and could reverse the
+    direction.
 
-    The exclusion is confined to the tests and the fitted line. The `yearly`
-    rows themselves are untouched, so the table still shows every year the user
-    asked about, flagged, and `summary` still counts every detected event. The
-    user chose to see their whole range, not a silently shortened one.
+    The exclusion is confined to the tests and the fitted line. The `yearly` rows
+    and the `summary` totals are untouched, so the table still shows every year
+    the user asked about, flagged.
 
-    **Invariant for callers:** `fitted` has one value per *included* year, in
-    the same order as `yearly` with the flagged rows removed. It is therefore
-    shorter than `yearly` whenever any year was flagged. The frontend must join
-    on the `low_quality` flag rather than assuming the two arrays line up
-    index-for-index.
+    **Invariant:** `fitted` has one value per *included* year, in the same order
+    as `yearly` with the flagged rows removed, so it is shorter whenever a year
+    was flagged. Callers must join on the `low_quality` flag, not on position.
     """
     included = [row for row in yearly if not row.get("low_quality")]
     excluded = [row["year"] for row in yearly if row.get("low_quality")]
@@ -80,11 +69,10 @@ def analyse_trend(yearly: list[dict]) -> dict:
     counts = [row["events"] for row in included]
 
     if len(counts) < 3:
-        # Neither test means anything on fewer than three points. Reporting
-        # "no clear trend" is the honest answer, and the API already enforces a
-        # ten year minimum, so this only guards direct callers. Excluding
-        # low-quality years can legitimately drop a short series below three,
-        # which is a real possibility rather than a theoretical one.
+        # Neither test means anything on fewer than three points. The API already
+        # enforces a ten year minimum, so this only guards direct callers — but
+        # excluding low-quality years can legitimately drop a short series below
+        # three, which is a real possibility rather than a theoretical one.
         logger.warning(
             "Trend requested for only %d usable year(s) after excluding %d "
             "low-quality year(s); reporting no trend",
@@ -121,11 +109,9 @@ def analyse_trend(yearly: list[dict]) -> dict:
         "significant": significant,
         "mann_kendall_p": p_value,
         "sen_slope_per_year": _finite(mk.slope),
-        # Least squares only draws the line; the label came from Mann-Kendall.
         "regression_slope_per_year": _finite(regression.slope),
-        # The fitted line, recomputed from the returned slope and intercept.
-        # linregress does not hand the fitted values back, and the brief wants
-        # them, so they are rebuilt here: y = intercept + slope * year.
+        # linregress does not return the fitted values, so they are rebuilt
+        # here: y = intercept + slope * year.
         "fitted": [
             _finite(regression.intercept + regression.slope * year)
             for year in years
@@ -136,15 +122,13 @@ def analyse_trend(yearly: list[dict]) -> dict:
 def compare_periods(yearly: list[dict]) -> dict:
     """Compare two periods by events per year, never by raw totals.
 
-    Raw totals are misleading whenever the two periods are different lengths: ten
-    years at 2 events a year totals 20, and twenty years at 1 a year totals 20
-    too, but they are opposite stories. Dividing by the number of years in each
-    period removes the length from the comparison entirely.
+    Raw totals mislead whenever the lengths differ: ten years at 2 events a year
+    totals 20, and twenty years at 1 a year totals 20 too, but they are opposite
+    stories.
 
-    The periods are the first and last third of the range, or the first and
-    last two decades when the range is long enough to have them. Whichever is
-    used, the labels go back in the response so the UI can name the periods
-    rather than assuming one.
+    The periods are the first and last third of the range, or the first and last
+    two decades when the range is long enough to have them. Either way the labels
+    go back in the response so the UI can name them rather than assume.
     """
     if not yearly:
         return {
@@ -152,10 +136,9 @@ def compare_periods(yearly: list[dict]) -> dict:
             "late": {"label": "", "events_per_year": 0.0, "avg_duration_days": None},
         }
 
-    # Low-quality years are excluded here too, for consistency with the trend
-    # tests. Keeping them would make the two halves of the same response
-    # disagree about which data is trustworthy: a chart line built from good
-    # years beside a period comparison that silently counted the bad ones.
+    # Excluded here too, for consistency with the trend tests: a chart line built
+    # from good years beside a period comparison that counted the bad ones would
+    # make one response disagree with itself.
     usable = [row for row in yearly if not row.get("low_quality")]
     source = usable or yearly
 

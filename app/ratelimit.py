@@ -1,32 +1,24 @@
 """Rate limiting, in two tiers.
 
-The brief asks for 60 requests/minute per IP on cached reads and 6/minute for
-requests that can trigger an external fetch. Those cannot both be enforced by a
-single limiter in front of the route, because whether a request is cached is
-only known *after* the lookup, and a limiter decorator runs before that.
+A single limiter in front of the route cannot enforce both budgets, because
+whether a request is cached is only known *after* the lookup, and a limiter
+decorator runs before that.
 
-So there are two separate budgets:
+* **`GENERAL_LIMIT`** applies to every analysis request, bounding the work the
+  server will do.
+* **`UPSTREAM_LIMIT`** is checked at the point of an Open-Meteo call, so a
+  returning user reading from the cache never spends it. Spending it would make
+  the cache pointless: the second visitor should not be charged for the first
+  visitor's fetch.
 
-* **`GENERAL_LIMIT`** applies to every analysis request. It stops abuse and
-  bounds the work the server will do.
-* **`UPSTREAM_LIMIT`** applies only when a request is about to call Open-Meteo.
-  It is checked at the point of use, so a returning user reading from the cache
-  never spends this budget. Spending it would make the cache pointless: the
-  whole point of storing a result is that the second visitor is not charged for
-  the first visitor's fetch.
+Both are sliding windows, which avoids the boundary burst a fixed window allows:
+a fixed window lets a client spend its whole allowance at 11:59:59 and again at
+12:00:00. Storage is in-process memory, which resets on restart and is not shared
+across replicas, and the README says so rather than implying a distributed
+guarantee.
 
-Both are sliding windows (a moving window rate limiter), which avoids the
-boundary burst a fixed window allows: a fixed window lets a client spend its
-whole allowance at 11:59:59 and again at 12:00:00.
-
-Storage is in-process memory, which is the honest choice for a single-process
-deployment. It resets on restart and is not shared across replicas. The comment
-in the README says so rather than implying a distributed guarantee.
-
-`slowapi` is the dependency the brief names, and this module uses it for the
-application state and its exception type, while the counters themselves come
-from `limits`, which slowapi is built on. Doing it this way keeps one storage
-backend and one strategy rather than layering two.
+The counters come from `limits`, which slowapi is built on, so there is one
+storage backend and one strategy rather than two layered on top of each other.
 """
 
 import logging
@@ -49,11 +41,9 @@ GENERAL_LIMIT = "60 per minute"
 # this process's CPU.
 UPSTREAM_LIMIT = "6 per minute"
 
-# Applied to Nominatim reverse-geocoding lookups, which have their own budget
-# because they hit a different service on a different clock. Nominatim's usage
-# policy caps clients at one request per second, so 60/min is the ceiling rather
-# than a policy of ours. Keeping it separate means a burst of place lookups
-# cannot starve the weather fetch, and vice versa.
+# Nominatim's usage policy caps clients at one request per second, so 60/min is
+# their ceiling rather than a policy of ours. Keeping it separate stops a burst
+# of place lookups starving the weather fetch, and vice versa.
 PLACE_LIMIT = "60 per minute"
 
 # Read endpoints are pure reads, so a short shared cache is safe and saves the
@@ -67,9 +57,9 @@ _general_item = parse(GENERAL_LIMIT)
 _upstream_item = parse(UPSTREAM_LIMIT)
 _place_item = parse(PLACE_LIMIT)
 
-# The limiter the brief names, attached to the app so its decorators and
-# exception handler work. Its own counters are not used for the two budgets
-# above, which need finer control than a decorator allows.
+# Attached to the app so slowapi's decorators and exception handler work. Its own
+# counters are unused; the two budgets above need finer control than a decorator
+# allows.
 limiter = Limiter(key_func=get_remote_address, default_limits=[])
 
 
@@ -86,14 +76,12 @@ def _decision(item, key: str, limit_text: str) -> Decision:
     """Check the budget without spending it.
 
     `test()` rather than `hit()`: the general budget is checked on every request
-    but should only be charged once, and the upstream budget is charged at the
-    point of the fetch. `test()` reports whether a hit would succeed without
-    recording one, which is exactly the question being asked here.
+    but charged once, and the upstream budget is charged at the fetch. `test()`
+    reports whether a hit would succeed without recording one.
 
-    Note the two `limits` API traps this avoids, both of which fail silently or
-    confusingly if used by name: `item.amount` is a plain int (not a method),
-    and `WindowStats.count` is `tuple.count`, the namedtuple's own method, not a
-    field. `remaining` is the field to read.
+    Two `limits` API traps avoided here, both of which fail confusingly if used
+    by name: `item.amount` is a plain int, not a method, and `WindowStats.count`
+    is the namedtuple's own `tuple.count`. `remaining` is the field to read.
     """
     if _counter.test(item, key):
         return Decision(allowed=True, limit=limit_text)
@@ -148,7 +136,7 @@ def spend_upstream(key: str) -> Decision:
 def spend_place(key: str) -> Decision:
     """Charge the place-name budget for one Nominatim lookup.
 
-    Separate from the weather budget on purpose. They are different services on
+    Separate from the weather budget because they are different services on
     different clocks, and a user clicking around the map must not be able to
     exhaust the allowance that protects the Open-Meteo fetch.
     """

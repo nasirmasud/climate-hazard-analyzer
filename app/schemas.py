@@ -1,11 +1,8 @@
 """Request and response models.
 
-This module is the contract. The frontend's `types.ts` mirrors it field for
-field, so a change here must be made there too. Every response field below
-comes straight from the brief's response shape; nothing is invented.
-
-All input validation lives here rather than in the routes, so an invalid
-request is rejected before any work (or any call to Open-Meteo) happens.
+This module is the contract: `frontend/src/types.ts` mirrors it field for field,
+so a change here must be made there too. Input validation lives here rather than
+in the routes, so a bad request is rejected before any external call happens.
 """
 
 from datetime import date
@@ -15,11 +12,9 @@ from pydantic import BaseModel, Field, model_validator
 
 from .regions import get_region
 
-# Mirrors heatwave.BASELINE_START. Phase 2 imports the real constant from
-# heatwave.py so there is only ever one definition of the baseline start.
+# Mirrors heatwave.BASELINE_START, which must be kept in step with it.
 EARLIEST_YEAR = 1990
 
-# The brief caps a custom box at 2 degrees on each side.
 MAX_BOX_SPAN_DEG = 2.0
 
 # A trend needs enough years to mean anything.
@@ -31,8 +26,7 @@ HazardName = Literal["heatwave"]
 def last_complete_year() -> int:
     """The most recent calendar year that has fully finished.
 
-    The current year is excluded because it would only be partway through the
-    data, which would bias a trend upwards.
+    Excluding the current year avoids biasing a trend upwards with partial data.
     """
     return date.today().year - 1
 
@@ -45,8 +39,8 @@ def last_complete_year() -> int:
 class AnalysisRequest(BaseModel):
     """Parameters for GET /api/analysis.
 
-    Exactly one location must be given: a preset `region` id, a single
-    `lat`/`lon` point, or a `min_lat`/`max_lat`/`min_lon`/`max_lon` box.
+    Exactly one location: a preset `region` id, a `lat`/`lon` point, or a full
+    min_lat/max_lat/min_lon/max_lon box.
     """
 
     region: str | None = None
@@ -148,16 +142,15 @@ class AnalysisRequest(BaseModel):
         return self.lon
 
     def resolve_location(self) -> tuple[str, float, float, str]:
-        """Work out what to actually query and how to describe it in the UI.
+        """Work out what to query and how to describe it in the UI.
 
         Returns (name, lat, lon, source_point). Coordinates are rounded to two
-        decimals here, before any cache key is built, so that near-identical
-        requests share one stored result.
+        decimals here, before any cache key is built, so near-identical requests
+        share one stored result.
         """
         if self.region:
             preset = get_region(self.region)
-            # Unreachable in practice: the validator already rejected unknown
-            # ids. Kept explicit so this function is safe to call on its own.
+            # Unreachable via the API, but kept so this function is safe alone.
             if preset is None:
                 raise ValueError(f"Unknown region '{self.region}'.")
             return preset.name, round(preset.lat, 2), round(preset.lon, 2), "preset"
@@ -183,7 +176,7 @@ class RegionOut(BaseModel):
     name: str
     lat: float
     lon: float
-    # Plain-language note on which point was actually queried.
+    # Human-readable, e.g. "center of box".
     source_point: str
 
 
@@ -199,12 +192,10 @@ class HealthOut(BaseModel):
 
 
 class PlaceNameOut(BaseModel):
-    """
-    A short name for a coordinate, or null when none could be found.
+    """A short name for a coordinate, or null when none could be found.
 
-    Null is a normal, expected outcome: open water, unpopulated land, a lookup
-    that timed out, or a rate limit. The frontend treats it as "use the plain
-    label", so it is never an error.
+    Null is a normal outcome (open water, unpopulated land, a timeout or a rate
+    limit) that the frontend renders as the plain label, not as an error.
     """
 
     name: str | None = None
@@ -240,8 +231,7 @@ class YearlyOut(BaseModel):
     heatwave_days: int
     avg_duration_days: float | None = None
     avg_intensity_c: float | None = None
-    # Required by the brief's yearly aggregates, kept alongside avg_intensity_c
-    # so the table can show both without a second request.
+    # Kept alongside avg_intensity_c so the table shows both from one response.
     avg_max_temp_during_events_c: float | None = None
     low_quality: bool = False
 

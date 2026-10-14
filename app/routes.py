@@ -1,20 +1,16 @@
 """API endpoints.
 
-`/api/analysis` is the only endpoint that does real work. It follows a three
-tier read path, and the order is what makes the cache worth having:
-
-1. `analyses` — has this exact request already been answered?
-2. `daily_temps` — do we already hold this location's full daily series?
-3. Open-Meteo — only when both of the above miss.
+`/api/analysis` is the only endpoint that does real work, and it follows a three
+tier read path whose order is what makes the cache worth having: `analyses`, then
+`daily_temps`, then Open-Meteo only when both miss.
 
 Two rules hold throughout:
 
-* **A cache problem must never fail a request.** Every pymongo call goes
-  through a wrapper that logs and returns None on failure, so an unreachable
-  database degrades performance rather than availability.
-* **The lock is held across the computation, not just the fetch.** That is what
-  makes concurrent cold requests collapse into one upstream call *and* one
-  computation, instead of merely one fetch.
+* **A cache problem must never fail a request.** Every pymongo call goes through
+  a wrapper that logs and returns None, so an unreachable database degrades
+  performance rather than availability.
+* **The lock is held across the computation, not just the fetch.** That collapses
+  concurrent cold requests into one upstream call *and* one computation.
 """
 
 import csv
@@ -98,11 +94,11 @@ async def get_place_name(request: Request, lat: float, lon: float) -> Response:
     """A short name for a coordinate, reverse geocoded via OpenStreetMap.
 
     Returns `{"name": null}` rather than an error for every failure: no result
-    found, a timeout, a rate limit, or an unreachable service. The frontend has
-    a perfectly good label to fall back to, and a lookup that fails must never
-    interrupt the analysis the user actually asked for.
+    found, a timeout, a rate limit, or an unreachable service. The frontend has a
+    good label to fall back to, and a failed lookup must never interrupt the
+    analysis the user actually asked for.
 
-    The general budget applies. The Nominatim budget is charged inside the
+    The general budget applies here; the Nominatim budget is charged inside the
     lookup, so it only applies to requests that genuinely reach the network.
     """
     general = ratelimit.spend_general(ratelimit.client_key(request))
@@ -113,8 +109,8 @@ async def get_place_name(request: Request, lat: float, lon: float) -> Response:
 
     return JSONResponse(
         content=PlaceNameOut(name=name).model_dump(),
-        # A short TTL: a name is stable, but the frontend would rather ask again
-        # in five minutes than show a stale one for a day.
+        # A short TTL: a name is stable, but re-asking in five minutes beats
+        # showing a stale one for a day.
         headers={"Cache-Control": f"public, max-age={ratelimit.CACHE_CONTROL_MAX_AGE}"},
     )
 
@@ -191,10 +187,9 @@ def _upstream_error() -> JSONResponse:
     )
 
 
-# The header is fixed text, never derived from input. A formula injection
-# (`=`, `+`, `-`, `@` as the first character of a cell) would be executed by
-# Excel and LibreOffice when the file is opened, so any value that could carry
-# one is prefixed with an apostrophe.
+# The header is fixed text, never derived from input. A formula injection (`=`,
+# `+`, `-`, `@` as a cell's first character) would execute in Excel and
+# LibreOffice on open, so any value that could carry one is prefixed below.
 CSV_COLUMNS = (
     "year",
     "events",
@@ -230,9 +225,9 @@ def build_csv(yearly) -> str:
     writer.writerow(CSV_COLUMNS)
 
     for row in yearly:
-        # The rows may be YearlyOut models or plain dicts depending on whether
-        # this came from a fresh computation or a cached body, so read them the
-        # same way either way rather than assuming one shape.
+        # Rows may be YearlyOut models or plain dicts, depending on whether this
+        # came from a fresh computation or a cached body. Read them the same way
+        # either way rather than assuming one shape.
         if isinstance(row, dict):
             values = [row.get(column) for column in CSV_COLUMNS]
         else:
@@ -245,9 +240,9 @@ def build_csv(yearly) -> str:
 def _csv_filename(name: str, start_year: int, end_year: int) -> str:
     """A filename built only from validated values.
 
-    The region name comes from our own preset list, never from the query string,
-    so it cannot contain a path separator or a quote. Anything unexpected falls
-    back to a constant rather than being echoed into a header.
+    The region name comes from our own preset list, never the query string, so it
+    cannot contain a path separator or a quote. Anything unexpected falls back to
+    a constant rather than being echoed into a header.
     """
     slug = "".join(
         char for char in name.lower() if char.isalnum() or char in (" ", "-")
@@ -274,12 +269,10 @@ async def _analyse(
 ) -> AnalysisResponse | Response:
     """The analysis itself, returning either the model or an error response.
 
-    Split out from the endpoint so the CSV export can reuse exactly this logic.
+    Split out from the endpoint so the CSV export reuses exactly this logic.
     Duplicating it would risk the downloaded file and the on-screen table
-    disagreeing, which is precisely the inconsistency section 8.7 forbids.
-
-    The response is built once and validated by the response model, so a field
-    can never reach the frontend that the contract does not describe.
+    disagreeing. The response is built once and validated by the response model,
+    so a field can never reach the frontend that the contract does not describe.
     """
     # The general budget is charged before any work, including the cache
     # lookup. A caller who has exhausted it gets a 429 without the server doing
@@ -312,14 +305,11 @@ async def _analyse(
             if series is None:
                 return failure or _upstream_error()
 
-            # The pandas work is CPU-bound and would block the event loop, so
-            # it runs in a threadpool. This is the one style used throughout.
-            #
-            # It runs *inside* the lock deliberately. Holding the lock across
-            # the computation is what collapses a cold stampede into one fetch
-            # *and* one computation; computing outside it would let N callers
-            # each do identical work, which is exactly what the lock exists to
-            # prevent.
+            # The pandas work is CPU-bound and would block the event loop, so it
+            # runs in a threadpool. It runs *inside* the lock deliberately:
+            # holding the lock across the computation collapses a cold stampede
+            # into one fetch *and* one computation, where computing outside it
+            # would let N callers do identical work.
             body = await run_in_threadpool(
                 analysis.run_analysis, series, quality, start_year, end_year
             )
@@ -352,11 +342,10 @@ async def _analyse(
                 **body,
             )
 
-            # Store the *full* response, not just the analysis part. A cache
-            # hit rebuilds the response from this document alone, so anything
-            # omitted here would be missing from every cached response. The
-            # `cached` flag is dropped on purpose: a stored `cached: false`
-            # would be read back as a lie.
+            # Store the *full* response, not just the analysis part, because a
+            # cache hit rebuilds the response from this document alone. The
+            # `cached` flag is dropped on purpose: a stored `cached: false` would
+            # be read back as a lie.
             stored_body = response.model_dump(mode="json")
             stored_body.pop("cached", None)
             await _safe_cache_write(db.store_analysis, key, stored_body)

@@ -1,7 +1,6 @@
 """Preset regions.
 
-Coordinates are fixed by the brief. The `id` is what the frontend sends as
-`region=<id>`; it doubles as the label shown in the dropdown.
+`id` is what the frontend sends as `region=<id>`.
 """
 
 from dataclasses import dataclass
@@ -15,7 +14,7 @@ class Region:
     lon: float
 
 
-# Kept deliberately short, as the brief asks.
+# Kept deliberately short; adding more presets is a separate decision.
 REGIONS: list[Region] = [
     Region(id="dhaka", name="Dhaka", lat=23.81, lon=90.41),
     Region(id="chattogram", name="Chattogram", lat=22.36, lon=91.78),

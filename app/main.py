@@ -1,7 +1,7 @@
 """FastAPI application: CORS, shared error handling, router mounting.
 
-Error bodies are normalised here so every failure looks the same to the
-frontend, whatever raised it, and no stack trace ever reaches a client.
+Error bodies are normalised here so every failure looks the same to the frontend
+and no stack trace ever reaches a client.
 """
 
 import logging
@@ -37,11 +37,10 @@ def error_response(status_code: int, code: str, message: str) -> JSONResponse:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Create the cache indexes once, at boot, and close the pool on shutdown.
 
-    Doing this at startup rather than lazily means a slow first request is
-    avoided and an unreachable database is discovered at boot instead of on a
-    user's first click. `ensure_indexes` swallows connection errors on purpose:
-    the app is still useful without a cache, so a cache outage must degrade
-    performance rather than stop the app starting.
+    Boot-time means a slow first request is avoided and an unreachable database
+    is discovered at boot rather than on a user's first click. `ensure_indexes`
+    swallows connection errors deliberately: the app is still useful without a
+    cache, so an outage must degrade performance rather than stop startup.
     """
     await run_in_threadpool(db.ensure_indexes)
     yield
@@ -56,31 +55,21 @@ app = FastAPI(
 )
 
 # The deployed frontends, always. `frontend_origins` splits a comma-separated
-# FRONTEND_ORIGIN, because reading the raw string as one allowlist entry silently
-# matched nothing at all and every browser request was rejected.
+# FRONTEND_ORIGIN, because reading the raw string as one allowlist entry matched
+# nothing and silently rejected every browser request.
 #
-# Named rather than kept local so tests can assert what was actually configured
-# instead of inferring it from a .env file that is deliberately not committed.
+# Named rather than kept local so tests can assert what was configured instead
+# of inferring it from a .env that is deliberately not committed.
 _allowed = set(settings.frontend_origins)
 
-# In development, allow any localhost port rather than a fixed 5173.
+# In development, allow any localhost port rather than a fixed 5173, because Vite
+# takes the next free one and a hard-coded port silently breaks the preflight.
 #
-# Vite takes the next free port when 5173 is already taken, so a hard-coded port
-# means any stray dev server silently breaks the app: the preflight gets no
-# Access-Control-Allow-Origin, `fetch` rejects, and the UI reports "backend
-# unreachable" while the API is perfectly healthy. That failure is confusing
-# because opening the API URL in a tab still works — a direct navigation sends
-# no Origin header, so CORS never applies to it.
-#
-# This only applies when every configured frontend origin is itself local, so a
-# deployed instance still refuses every origin except the real ones. A deployed
-# app is public, and allowing localhost there would let any page running on a
-# user's machine read its responses.
-#
-# The trade-off is worth stating plainly, because it surprises people: listing a
-# deployed origin alongside a local one on the same instance switches the sweep
-# off. A developer running both against one backend therefore has to name the
-# exact port they use.
+# Gated on every configured origin being local: a deployed app is public, and
+# allowing localhost there would let any page on a user's machine read its
+# responses. The surprise worth knowing is that listing a deployed origin beside
+# a local one switches this sweep off, so a developer running both against one
+# backend has to name the exact port they use.
 if settings.has_local_frontend:
     _allowed |= {f"http://localhost:{port}" for port in range(5173, 5192)}
     _allowed |= {f"http://127.0.0.1:{port}" for port in range(5173, 5192)}
@@ -96,8 +85,8 @@ app.add_middleware(
 )
 
 # slowapi needs its limiter reachable from app.state for its own decorators and
-# for the middleware below. The two budgets in ratelimit.py are counted
-# separately and deliberately.
+# its exception handler. The two budgets in ratelimit.py are counted separately
+# and deliberately.
 app.state.limiter = ratelimit.limiter
 
 
@@ -107,9 +96,8 @@ async def rate_limit_handler(
 ) -> JSONResponse:
     """Turn a slowapi rejection into the same error shape as everything else.
 
-    Task 89: one error body across 422, 429, 500 and 502. Without this the
-    framework's default would return `{"detail": ...}` and the frontend would
-    have to special-case 429.
+    The framework default would return `{"detail": ...}`, forcing the frontend to
+    special-case 429.
     """
     return error_response(429, "rate_limited", "Too many requests.")
 
@@ -137,16 +125,10 @@ async def validation_error_handler(
 def _clean_validation_message(raw: str) -> str:
     """Reduce Pydantic's error text to the sentence a person should read.
 
-    A `model_validator` failure arrives as the whole summary string:
-
-        "1 validation error for AnalysisRequest\\n  Value error, Unknown region
-         'london'. [type=value_error, input_value={...}, input_type=dict]\\n
-         For further information visit https://errors.pydantic.dev/..."
-
-    Three things have to go: the count header, the trailing type/input/URL
-    metadata, and the `input_value` dump — which would otherwise echo the user's
-    whole request back at them. What remains is the sentence the validator
-    wrote on purpose.
+    A `model_validator` failure arrives as the whole summary string: a count
+    header, a `[type=..., input_value={...}]` trailer and a documentation URL.
+    The `input_value` dump matters most, because it would echo the user's whole
+    request back at them. What remains is the sentence the validator wrote.
     """
     text = raw.strip()
 
@@ -170,19 +152,13 @@ async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse
     """Catch ValueError raised inside a Pydantic model validator.
 
     FastAPI's own validation errors arrive as `RequestValidationError` and are
-    handled above. But a `model_validator` that raises `ValueError` propagates
-    as a bare `ValueError`, bypassing that handler entirely and landing in the
-    generic 500 below.
+    handled above, but a `model_validator` raising `ValueError` propagates as a
+    bare `ValueError` and bypasses that handler, landing in the generic 500
+    below. Every rule in check_location and check_years would then report a
+    server failure for input the user simply got wrong.
 
-    The effect was that every rule in `AnalysisRequest.check_location` and
-    `check_years` — oversized box, reversed years, unknown region, year span
-    too short — returned "Something went wrong on our side" with a 500, telling
-    the user the server had failed when in fact their input was rejected. That
-    is exactly the message a client-side validation bug is supposed to prevent
-    showing.
-
-    These messages are written for a person and are shown verbatim in the UI, so
-    they pass straight through.
+    These messages are written for a person and shown verbatim in the UI, so they
+    pass straight through.
     """
     message = _clean_validation_message(str(exc)) or "Invalid request."
     logger.info("Rejected invalid request to %s: %s", request.url.path, message)

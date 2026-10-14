@@ -1,24 +1,3 @@
-"""The analysis pipeline: raw daily temperatures in, one API response out.
-
-This module owns the order of operations, which matters because each step
-depends on the one before:
-
-1. fetch and clean the full 1990-onward daily series for the location
-2. compute the calendar-day thresholds from the fixed 1990-2020 baseline
-3. slice the series down to the years the user asked about
-4. detect events, then aggregate them per year
-5. run the trend tests and the period comparison on those yearly counts
-6. build the response
-
-Step 2 runs on the *whole* series, not the sliced one, because the thresholds
-must come from the fixed baseline regardless of which years the user selects.
-If the thresholds followed the user's range, choosing a different start year
-would move the threshold and quietly change the trend being measured.
-
-The pandas work here is CPU-bound and synchronous. The route runs this in a
-threadpool so a long analysis cannot block the event loop.
-"""
-
 import logging
 
 import numpy as np
@@ -29,19 +8,15 @@ from .ingest import QualitySummary, UpstreamError
 
 logger = logging.getLogger("climate")
 
-# Section 8.2: the trend line the chart draws. Only the threshold maths above is
-# project specific; this is just the shape of a heatwave.
-
 
 def compute_summary(
     series: pd.DataFrame,
     events: list[heatwave.HeatwaveEvent],
     span_years: int,
 ) -> dict:
-    """Section 9.3 summary fields, derived from the same event list as yearly.
+    """Summary fields, derived from the same event list as the yearly rows.
 
-    Deriving both from one source is what makes the cards, the chart and the
-    table reconcile: there is no second place for a total to come from.
+    One source for both is what makes the cards, chart and table reconcile.
     """
     if not events:
         return {
@@ -60,10 +35,9 @@ def compute_summary(
         "avg_intensity_c": float(
             np.mean([event.mean_intensity_c for event in events])
         ),
-        # The mean daily maximum across every event day, which is a different
-        # figure from the mean of the per-event peaks and is what section 7.7.5
-        # asks for. Reuses the same helper the yearly rows use, so the summary
-        # card and the table cannot disagree.
+        # Mean daily maximum across every event day, which differs from the mean
+        # of per-event peaks. Same helper as the yearly rows, so the summary card
+        # and the table cannot disagree.
         "avg_max_temp_during_events_c": heatwave.mean_max_temp_on_event_days(
             series, events
         ),
@@ -78,10 +52,9 @@ def run_analysis(
     start_year: int,
     end_year: int,
 ) -> dict:
-    """Everything downstream of the fetch, in the order it has to happen.
+    """Runs the pipeline downstream of the fetch, in the order it must happen.
 
-    Returns the response body minus the region, params and threshold blocks,
-    which the route fills in from the request it already has.
+    Omits region, params and threshold, which the route fills from the request.
     """
     thresholds = heatwave.compute_thresholds(series)
 
@@ -116,8 +89,7 @@ def run_analysis(
         "period_comparison": periods,
         "data_quality": {
             # Quality is reported for the full fetched series, not just the
-            # selected years, because that is what was actually retrieved and
-            # a reader needs to know the extent of what was missing.
+            # selected years, so a reader sees the extent of everything missing.
             "total_days": quality.total_days,
             "missing_days": quality.missing_days,
             "interpolated_days": quality.interpolated_days,
