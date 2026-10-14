@@ -6,7 +6,7 @@
 @import 'leaflet/dist/leaflet.css';
 
 /* One warm accent for heat, one cool accent for the trend line. Nothing else
-   carries meaning by colour alone, per the visual design rules. */
+   carries meaning by colour alone. */
 @theme {
   --color-heat: #e4492b;
   --color-heat-soft: #fff1ec;
@@ -29,15 +29,14 @@ body {
 /*
  * Printing.
  *
- * The page is a dashboard, and a dashboard prints badly without help: the input
- * controls and the map are meaningless on paper, the yearly table is capped at a
- * screen-height scroll box so most of it is silently cut off, and the chart is
- * measured in pixels against the screen width rather than the page width.
+ * A dashboard prints badly without help: the controls and the map are meaningless
+ * on paper, the yearly table is capped at a screen-height scroll box so most of it
+ * is silently cut off, and the chart is measured in pixels against the screen
+ * width rather than the page width.
  *
  * Element-level show/hide is handled with Tailwind's `print:` variant where the
- * component owns the element. What is left here is the work that has to be CSS
- * to be correct: the table's scroll cap, the chart's sizing, colour fidelity and
- * page breaks.
+ * component owns the element. What is left here is the work that has to be CSS:
+ * the table's scroll cap, the chart's sizing, colour fidelity and page breaks.
  */
 @media print {
   /* Heat and trend colours are the only thing distinguishing the two series, so

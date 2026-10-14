@@ -1,9 +1,9 @@
 /**
- * Mirrors backend/app/schemas.py field for field, including nullability.
- * If a field changes there, it changes here. Keep the two in step.
+ * Mirrors backend/app/schemas.py field for field, including nullability. If a
+ * field changes there, it changes here.
  *
- * Nullable fields are `| null` because the backend genuinely returns null:
- * a year with no heatwave events has no average duration or intensity, and
+ * Nullable fields are `| null` because the backend genuinely returns null: a
+ * year with no heatwave events has no average duration or intensity, and
  * showing 0 there would read as a real measurement.
  */
 
@@ -19,8 +19,7 @@ export interface PresetRegion {
   lon: number
 }
 
-/** Parameters the user submitted. The query only runs from here, not on
- *  every keystroke, so these stay stable while typing. */
+/** Parameters the user submitted. The query runs from here, not per key. */
 export interface AnalysisParams {
   region?: string
   lat?: number
@@ -38,7 +37,7 @@ export interface RegionOut {
   name: string
   lat: number
   lon: number
-  /** Which point was actually queried: 'preset', 'point', or 'center of box'. */
+  /** Which point was queried: 'preset', 'point', or 'center of box'. */
   source_point: string
 }
 

@@ -1,23 +1,20 @@
 /**
  * Location picker on an OpenStreetMap base.
  *
- * Clicking anywhere on the map sets a box centred on that point. The latitude
- * half-span is half a degree; the longitude half-span is widened by
+ * Clicking anywhere sets a box centred on that point. The latitude half-span
+ * is fixed at 0.375 degrees; the longitude half-span is widened to
  * 0.5 / cos(latitude) so the box looks square on the map rather than square in
- * degrees. Both spans stay well inside the 2 degree limit the brief imposes, so
- * a click can never produce a request the backend rejects.
- *
- * The centre is the click itself at every latitude, so the squareness
- * correction never moves the point that gets queried.
+ * degrees. Both spans stay well inside the 2 degree limit, so a click can
+ * never produce a request the backend rejects. The centre is the click itself
+ * at every latitude, so that correction never moves the point queried.
  *
  * The map and the lat/lon inputs are two views of one value. Neither owns the
- * state: `ControlBar` does, so typing in an input moves the marker and clicking
- * the map rewrites the inputs. That is what keeps them in sync, rather than
- * syncing them after the fact and hoping.
+ * state: `ControlBar` does, which is what keeps them in sync rather than
+ * reconciling them after the fact and hoping.
  *
- * ERA5 is a grid, so only the point at the box's centre is actually queried.
- * The rectangle shows the area the user selected and the marker sits at the one
- * point that is read, which keeps that distinction visible instead of implied.
+ * ERA5 is a grid, so only the box's centre is actually queried. The rectangle
+ * shows the area the user selected and the marker sits at the one point that
+ * is read, which keeps that distinction visible instead of implied.
  *
  * The window is 2:1 and limited to 58S–72N, so that zooming out fills it with
  * map rather than grey bands or a repeated world. See `mapViewport.ts` for why
@@ -46,27 +43,22 @@ const OSM_ATTRIBUTION =
 /** Somewhere sensible to look before anything has been chosen. */
 const DEFAULT_CENTER: [number, number] = [23.8, 90.4]
 
-/**
- * Zoom for the initial view. 6 shows South Asia — roughly Bangladesh, Nepal and
- * most of eastern India — which is where every preset region sits, so the map
- * opens somewhere relevant rather than on the whole planet.
- */
+/** Initial view. 6 shows South Asia, where every preset region sits. */
 const DEFAULT_ZOOM = 6
 
-/** The zoom to use once a box has been chosen: close enough to place a point. */
+/** The zoom once a box is chosen: close enough to place a point. */
 const CHOSEN_ZOOM = 8
 
 /**
  * Shape of the map window, as a CSS aspect ratio rather than a pixel height.
  *
- * Leaflet measures its container to fill it, so the container needs a height it
- * can resolve before that measurement happens. An `aspect-ratio` with a definite
- * width gives one, where `height: auto` would collapse the map to zero.
+ * Leaflet measures its container to fill it, so the container needs a height
+ * it can resolve before that measurement happens. An `aspect-ratio` with a
+ * definite width gives one, where `height: auto` would collapse the map to
+ * zero.
  *
- * **2:1** rather than a fixed height because the minimum zoom that fills the
- * window with no grey bands depends on the window's shape (see `mapViewport.ts`).
- * At a fixed height, a wider viewport would either clip the band or leave grey
- * at the sides. Pinning the ratio keeps the fit exact at every width.
+ * 2:1 rather than a fixed height because the minimum zoom that fills the window
+ * with no grey bands depends on the window's shape (see `mapViewport.ts`).
  */
 const MAP_ASPECT = '2 / 1'
 
@@ -78,14 +70,13 @@ interface Props {
 /**
  * A plain div marker rather than Leaflet's default pin image.
  *
- * The default pins come from image files that a bundler does not rewrite inside
- * a package, which produces the classic "marker-icon.png failed to load"
- * problem. A divIcon needs no asset and reuses the warm accent from the theme.
+ * The default pins come from image files a bundler does not rewrite inside a
+ * package, which produces the classic "marker-icon.png failed to load" issue.
+ * A divIcon needs no asset and reuses the warm accent from the theme.
  *
  * **No negative margin on the inner div.** `iconAnchor: [7, 7]` already centres
- * the 14x14 icon box on the coordinate. An earlier version also set
- * `margin: -7px 0 0 -7px` on the inner div, which offset it a *second* time and
- * put the dot seven pixels up and to the left of the rectangle's true centre.
+ * the 14x14 icon box on the coordinate, so a margin would offset it a second
+ * time.
  */
 const centreIcon = divIcon({
   className: '',
@@ -97,9 +88,9 @@ const centreIcon = divIcon({
 /**
  * The map is a control, so it needs a name and a tab stop.
  *
- * Leaflet's container is a plain div with no role, which leaves it invisible to
- * a screen reader and unreachable by keyboard. `tabIndex` puts it in the tab
- * order; once focused, the arrow keys pan and plus and minus zoom.
+ * Leaflet's container is a plain div with no role, which leaves it invisible
+ * to a screen reader and unreachable by keyboard. Once focused, arrow keys pan
+ * and plus and minus zoom.
  */
 const MAP_PROPS = {
   role: 'application',
@@ -111,9 +102,8 @@ const MAP_PROPS = {
 /**
  * Turns map clicks into a new box. A child so it can use the map context.
  *
- * Mounted unconditionally. This component is what creates the *first* box, so
- * gating it on an existing box would be circular: no box means no click
- * handler, and without a click handler there can never be a box.
+ * Mounted unconditionally: this is what creates the *first* box, so gating it
+ * on an existing box would be circular.
  */
 function ClickHandler({ onPick }: { onPick: Props['onPick'] }) {
   useMapEvents({
@@ -146,10 +136,9 @@ function ViewportBand() {
     const container = map.getContainer()
 
     /**
-     * Observed rather than listening to `window.resize`, because the map is 2:1:
-     * its height changes whenever its *width* changes, which a window-level
-     * listener never sees — a sidebar opening or a breakpoint crossing changes
-     * the column width without the window resizing at all.
+     * Observed rather than `window.resize`, because the map is 2:1: its height
+     * changes whenever its *width* changes, which a window-level listener never
+     * sees.
      */
     const subscribe = (handler: () => void) => {
       if (typeof ResizeObserver === 'undefined') {
@@ -185,12 +174,10 @@ export function RegionMap({ box, onPick }: Props) {
       <MapContainer
         center={center ?? DEFAULT_CENTER}
         zoom={center ? CHOSEN_ZOOM : DEFAULT_ZOOM}
-        // The band, applied as options that have to agree. maxBounds keeps the
-        // view over the latitudes worth showing, minZoom — set by ViewportBand
-        // below, because it depends on the measured size — is the level at
-        // which the window exactly covers the band, and noWrap lives on the tile
-        // layer below because that is where it belongs. Without all three,
-        // zooming out shows grey bands or two copies of the world.
+        // maxBounds and noWrap go where they belong — noWrap on the
+        // TileLayer — while minZoom is set by ViewportBand below, because it
+        // depends on the measured size. Without all three, zooming out shows
+        // grey bands.
         maxBounds={VIEWPORT_BOUNDS}
         // h-full w-full to fill the aspect-ratio wrapper. z-0 to sit below the
         // sticky headers, so panning the map never scrolls the page instead.
@@ -200,7 +187,6 @@ export function RegionMap({ box, onPick }: Props) {
       >
         <TileLayer url={OSM_URL} attribution={OSM_ATTRIBUTION} noWrap />
 
-        {/* Always mounted: this is what creates the first box. */}
         <ClickHandler onPick={onPick} />
 
         <ViewportBand />

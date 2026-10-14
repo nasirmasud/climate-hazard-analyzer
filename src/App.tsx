@@ -1,21 +1,18 @@
 /**
- * Page shell, in the order the brief specifies:
- *   title -> control bar -> four summary cards -> chart + region ->
- *   insights + threshold + table -> footer
+ * Page shell: title -> control bar -> four summary cards -> chart + region ->
+ * insights + threshold + table -> footer.
  *
  * Every panel renders from one `AnalysisResponse`. There is no second request
- * and no client-side arithmetic on results, which is what keeps the cards, the
- * chart, the insights and the table telling the same story (section 8.7).
+ * and no client-side arithmetic on results, which is what keeps the cards, chart,
+ * insights and table telling the same story.
  *
- * Until a response arrives, every number shows a skeleton or an em dash. No
- * placeholder figures appear anywhere in this file.
+ * Until a response arrives, every number shows a skeleton or an em dash.
  *
- * The whole body is behind the backend health check. A free-tier backend that is
- * asleep cannot answer the regions call or the analysis call either, so letting
- * either one fire would mean two more requests queueing behind a boot that has
- * not started yet. Nothing below the header is rendered until it is ready, which
- * also means there is no empty dashboard sitting behind the wait, and nothing
- * focusable or clickable that cannot work.
+ * The whole body sits behind the backend health check. A sleeping free-tier
+ * backend cannot answer the regions or analysis call either, so letting either
+ * fire would queue two more requests behind a boot that has not started. Nothing
+ * below the header renders until it is ready, which also means there is no empty
+ * dashboard behind the wait and nothing focusable that cannot work.
  */
 
 import { useQuery } from '@tanstack/react-query'
@@ -117,13 +114,10 @@ function App() {
 
           {data && (
             <>
-              {/* `[&>*]:min-w-0` matters more than it looks. A grid item's automatic
-                  minimum size is its content's min-content width, so an item cannot
-                  shrink below what it contains. The yearly table's seven columns make
-                  that width larger than a phone viewport, which forced the whole row
-                  wider than the screen and took all three cards with it. Letting the
-                  items shrink lets the table's own scroll container do the work it
-                  was already written for. */}
+              {/* `[&>*]:min-w-0` matters more than it looks: a grid item's automatic
+                  minimum size is its content's min-content width, and the yearly
+                  table's seven columns exceed a phone viewport, which forced the
+                  whole row wider than the screen. */}
               <div className="mb-4 grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
                 <div className="lg:col-span-2">
                   <FrequencyChart data={data} />

@@ -28,10 +28,9 @@ const COORDINATE_PAIR = /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/
 /**
  * True when a string is really a coordinate pair rather than a place name.
  *
- * Guards against a future change passing coordinates through, and against an
- * upstream service that decides to echo its query back. The rule is that a label
- * never contains lat/lon, so the check is explicit rather than implied by where
- * the value came from.
+ * The rule is that a label never contains lat/lon, so this is checked
+ * explicitly rather than implied by where the value came from. That also
+ * covers an upstream service that decides to echo its query back.
  */
 export function looksLikeCoordinates(value: string): boolean {
   const haystack = value.trim().toLowerCase()
@@ -74,9 +73,8 @@ export function sanitisePlaceName(raw: string | null | undefined): string | null
  * The label to show for the custom-area option.
  *
  * Any failure — no name, an empty string, a network error, a slow lookup that
- * was abandoned — resolves to the fallback. There is no path through this
- * function that produces an empty label, because an empty dropdown entry looks
- * like a rendering bug.
+ * was abandoned — resolves to the fallback. No path produces an empty label,
+ * because an empty dropdown entry looks like a rendering bug.
  */
 export function resolvePlaceLabel(
   name: string | null | undefined,

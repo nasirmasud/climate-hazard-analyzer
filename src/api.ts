@@ -1,7 +1,4 @@
-/**
- * The only place the app talks to the network. Uses native fetch so there is
- * no HTTP library to learn about in the interview walkthrough.
- */
+/** The only place the app talks to the network. Native fetch, no library. */
 
 import type {
   AnalysisParams,
@@ -11,10 +8,9 @@ import type {
 } from './types'
 
 /**
- * Where the backend lives. Read from `VITE_API_URL` so the same bundle can point
- * at a local backend in development and at the Render service in production
- * without a code change. Exported so an error message can name the URL that
- * actually failed, which is the first thing worth checking when the API is
+ * Where the backend lives, read from `VITE_API_URL` so one bundle serves both
+ * development and production. Exported so an error message can name the URL
+ * that actually failed, which is the first thing worth checking when the API is
  * unreachable.
  */
 export const API_BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000').replace(
@@ -36,8 +32,7 @@ export class ApiError extends Error {
   }
 }
 
-/** Per-request options. Every field is optional, so a plain `request(path)`
- *  behaves exactly as it did before the timeout was added. */
+/** Per-request options; every field optional, so `request(path)` alone works. */
 interface RequestOptions {
   /** Cancels the request. Used to abandon a stale lookup. */
   signal?: AbortSignal
@@ -62,13 +57,12 @@ function combineSignals(signal: AbortSignal | undefined, timeout: AbortSignal | 
  * `timeoutMs` exists for the health check specifically. A sleeping free-tier
  * instance accepts the connection and then says nothing for the ~30 seconds it
  * needs to boot, so an unbounded fetch waits forever and the page looks broken
- * rather than busy. Other endpoints are deliberately left unbounded: a first
+ * rather than busy. Other endpoints are left unbounded on purpose: a first
  * analysis for an unseen location fetches decades of daily history upstream and
  * a timeout there would abort legitimate work.
  *
- * The timeout is a manual `AbortController` rather than `AbortSignal.timeout`,
- * because `placeLookup.ts` already found that not every environment this bundle
- * has to run in provides it.
+ * A manual `AbortController` rather than `AbortSignal.timeout`, which
+ * `placeLookup.ts` found not every target environment provides.
  */
 async function request<T>(
   path: string,
@@ -92,7 +86,7 @@ async function request<T>(
 
     if (!response.ok) {
       // The backend always returns the same error shape, so this is safe to
-      // assume. Fall back to the status text if something upstream returns HTML.
+      // assume. Fall back to the status text if something returns HTML.
       let code = 'http_error'
       let message = `Request failed (${response.status}).`
       try {
@@ -107,10 +101,9 @@ async function request<T>(
 
     return (await response.json()) as T
   } catch (error) {
-    // A timeout is reported as a plain Error, never as the `AbortError` that
-    // `fetch` throws. React Query reads an `AbortError` as "this query was
-    // cancelled" and skips the retry counter, which would quietly turn a
-    // twenty-attempt loop into a single attempt.
+    // A timeout is reported as a plain Error, never as the `AbortError` fetch
+    // throws: React Query reads an AbortError as "this query was cancelled" and
+    // skips the retry counter, quietly turning a twenty-attempt loop into one.
     if (controller !== null && controller.signal.aborted) {
       throw new Error(`No response within ${Math.round(timeoutMs! / 1000)} seconds.`, {
         cause: error,
@@ -155,11 +148,10 @@ export function buildAnalysisQuery(params: AnalysisParams): string {
 /**
  * Liveness check.
  *
- * `timeoutMs` is a required argument rather than a default so the fifteen
- * second budget lives with the rest of the wake-up policy in `useBackendHealth`
- * instead of being duplicated here. The request is `no-store` so the ten-minute
- * keep-alive ping can never be answered from the browser cache and report a
- * backend that has since gone away.
+ * `timeoutMs` is required rather than defaulted so the wake-up budget lives
+ * with the rest of the policy in `useBackendHealth` instead of being
+ * duplicated here. The request is `no-store` so the keep-alive ping can never
+ * be answered from the browser cache and report a backend that has gone away.
  */
 export function getHealth(timeoutMs: number) {
   return request<{ status: string }>('/api/health', { timeoutMs, cache: 'no-store' })
@@ -172,9 +164,9 @@ export function getRegions() {
 /**
  * A short name for a coordinate, or null.
  *
- * Reverse geocoding is a nicety, so this is allowed to fail: the caller treats
- * a null as "use the plain label". `signal` lets a stale lookup be abandoned
- * when the user has already clicked somewhere else.
+ * Reverse geocoding is a nicety, so this is allowed to fail and the caller
+ * treats null as "use the plain label". `signal` abandons a stale lookup when
+ * the user has already clicked somewhere else.
  */
 export function getPlaceName(lat: number, lon: number, signal?: AbortSignal) {
   const query = new URLSearchParams({ lat: String(lat), lon: String(lon) })

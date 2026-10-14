@@ -5,15 +5,13 @@
  *
  * 1. The y-domain is derived from the data, never fixed. A hard-coded 0-12 axis
  *    would flatten a quiet city's variation into a straight line at the bottom
- *    and exaggerate a busy one's. Padding is proportional to the range so the
- *    shape of the data reads the same whether there are 2 events a year or 12.
+ *    and exaggerate a busy one's.
+ * 2. The x-axis is numeric, not categorical. Years are evenly spaced and
+ *    should plot evenly; a category axis would treat 1990 and 1991 as
+ *    unrelated and bow the trend line incorrectly.
  *
- * 2. The x-axis is numeric, not categorical. Years are evenly spaced and should
- *    plot evenly; a category axis would treat 1990 and 1991 as unrelated
- *    categories and the trend line would bow incorrectly.
- *
- * Low-quality years are drawn as hollow dots so an excluded or flagged year is
- * visible in the chart rather than only in the data quality strip.
+ * Low-quality years are drawn as hollow dots, so a flagged year is visible in
+ * the chart rather than only in the data quality strip.
  */
 
 import {
@@ -35,13 +33,10 @@ interface Props {
 /** Build chart rows from the yearly rows plus the fitted trend line. */
 function buildRows(data: AnalysisResponse) {
   // The backend excludes low-quality years from the trend tests, so `fitted`
-  // has one value per *included* year, not per requested year. Walking the
-  // yearly rows and consuming `fitted` only on the good ones reproduces that
-  // alignment exactly.
-  //
-  // Indexing `fitted` by the position in `yearly` instead would silently draw
-  // the line against the wrong years the moment any year was flagged, and
-  // nothing in the response would look wrong.
+  // has one value per *included* year. Walking the yearly rows and consuming
+  // `fitted` only on the good ones reproduces that alignment exactly. Indexing
+  // by position instead would draw the line against the wrong years the moment
+  // a year was flagged, and nothing in the response would look wrong.
   let fittedIndex = 0
 
   return data.yearly.map((row) => {

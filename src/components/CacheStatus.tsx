@@ -1,22 +1,17 @@
 /**
  * Says whether the numbers on screen were just computed or came from the cache.
  *
- * This is a small strip rather than a line buried in the region panel,
- * because it changes how a reader should treat everything else on the page.
- * A freshly computed result is the first time this location has been analysed;
- * a cached one is a stored answer, which is the same numbers but not a new
- * reading of the weather service.
+ * A strip rather than a line buried in the region panel, because it changes
+ * how a reader should treat everything else on the page: a freshly computed
+ * result is the first time this location has been analysed, a cached one is a
+ * stored answer.
  *
- * Three states, matching what React Query actually knows:
+ * Three states, matching what React Query actually knows: no data yet; a fetch
+ * in flight over existing data, where the previous result is still on screen
+ * and is described as refreshing rather than discarded; and data present.
  *
- * - no data yet: nothing is claimed, because nothing has arrived
- * - a fetch in flight over existing data: the previous result is still on
- *   screen, so it is described as being refreshed rather than discarded
- * - data present: the server's own `cached` flag, verbatim
- *
- * The flag is read straight off the response and never inferred from timing.
- * Guessing from elapsed milliseconds would be a lie: a cached hit and a cold
- * hit on a fast connection can take the same time.
+ * The flag is read straight off the response and never inferred from timing:
+ * a cached hit and a cold hit on a fast connection can take the same time.
  */
 
 import type { AnalysisResponse } from '../types'

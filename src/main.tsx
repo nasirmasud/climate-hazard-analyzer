@@ -8,8 +8,7 @@ import './index.css'
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // A stored analysis does not change within a few minutes, and the brief
-      // asks for exactly this.
+      // A stored analysis does not change within a few minutes.
       staleTime: 5 * 60 * 1000,
       retry: 1,
     },

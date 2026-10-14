@@ -2,11 +2,10 @@
  * The four summary cards.
  *
  * Every figure comes from the response and nothing is hard-coded. While the
- * request is in flight each card shows a skeleton block rather than a zero or a
- * dash, because a zero would read as a real measurement of "no heatwaves".
- *
- * A genuine null from the API (a year with no events has no average duration)
- * renders as an em dash, which is the agreed signal for "we do not know".
+ * request is in flight each card shows a skeleton rather than a zero or a
+ * dash, because a zero would read as a real measurement of "no heatwaves". A
+ * genuine null from the API renders as an em dash, the agreed signal for "we
+ * do not know".
  */
 
 import type { AnalysisResponse } from '../types'

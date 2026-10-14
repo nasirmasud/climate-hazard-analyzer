@@ -1,17 +1,13 @@
 /**
  * Loading and error states.
  *
- * Two different waits are described here and they must not be confused.
- *
- * "Analyzing" is a computed result and takes about 1.5 seconds. An early
- * version warned that it "may need up to a minute to wake up" anyway, and
- * promising a minute of waiting for something that lands in a second and a half
- * teaches the user that every message here is padding.
- *
- * "Server is starting up" is the free-tier *service* cold start, which is real
- * and measured at roughly thirty seconds, and which is genuinely something to
- * wait on. It gets its own component, with the wait explained, because the user
- * cannot do anything to make it go faster and silence would read as a hang.
+ * Two different waits live here and must not be confused. "Analyzing" is a
+ * computed result and takes about 1.5 seconds — promising a minute for
+ * something that lands in a second and a half teaches the user that every
+ * message here is padding. "Server is starting up" is the free-tier *service*
+ * cold start, real and measured at roughly thirty seconds, which is genuinely
+ * something to wait on and gets its own component because the user cannot make
+ * it go faster and silence would read as a hang.
  */
 
 export function LoadingState() {
@@ -44,9 +40,9 @@ interface WakingUpProps {
 /**
  * Shown while the backend is booting, from the very first attempt.
  *
- * The counter is honest rather than reassuring: twenty attempts at four seconds
- * apart really is about a minute and a half of trying, and showing "1 of 20" on
- * a dead address tells the user far more than an unbounded spinner would.
+ * The counter is honest rather than reassuring: twenty attempts four seconds
+ * apart really is about a minute and a half, and "1 of 20" on a dead address
+ * tells the user far more than an unbounded spinner would.
  */
 export function WakingUpState({ attempt, maxAttempts }: WakingUpProps) {
   return (
@@ -86,9 +82,8 @@ interface BackendDownProps {
  * Shown once every attempt has been used up.
  *
  * The button exists because the loop has genuinely stopped, so waiting does
- * nothing any more. It restarts a full twenty attempts rather than a single one,
- * because the overwhelmingly likely cause is still a booting instance that was
- * slower than the budget allowed.
+ * nothing more. It restarts a full twenty attempts rather than one, because the
+ * likeliest cause is still a booting instance that outran the budget.
  */
 export function BackendUnreachableState({ message, onRetry }: BackendDownProps) {
   return (

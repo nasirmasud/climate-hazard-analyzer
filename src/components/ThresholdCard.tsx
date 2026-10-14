@@ -3,8 +3,8 @@
  *
  * There is no hard-coded "95th percentile / 3+ days / ±7-day window" copy here.
  * If a constant in `heatwave.py` changes, this card changes with it and no
- * frontend edit is needed. That also means this panel cannot drift out of sync
- * with the method that actually produced the numbers beside it.
+ * frontend edit is needed, so the panel cannot drift out of sync with the method
+ * that produced the numbers beside it.
  */
 
 import type { AnalysisResponse } from '../types'

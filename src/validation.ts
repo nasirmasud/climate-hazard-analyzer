@@ -1,13 +1,13 @@
 /**
- * Client-side validation, mirroring the backend's rules in section 11.1.
+ * Client-side validation, mirroring the backend's rules.
  *
- * These are a convenience that saves a round trip, never the authority. The
- * backend validates every one of these again, so a client that skips this file
- * is slower but no less correct.
+ * A convenience that saves a round trip, never the authority: the backend
+ * validates every one of these again, so a client that skips this file is
+ * slower but no less correct.
  *
- * The constants are deliberately duplicated from the backend rather than
- * fetched: they are part of the request contract, not results, and a validation
- * rule that arrives from the network cannot be trusted to block a request.
+ * The constants are duplicated from the backend rather than fetched: they are
+ * part of the request contract, not results, and a validation rule that arrives
+ * from the network cannot be trusted to block a request.
  */
 
 export const MIN_YEAR_SPAN = 10
@@ -17,9 +17,9 @@ export const MAX_BOX_SPAN_DEG = 2.0
 /**
  * The four bounds of a custom area.
  *
- * A named type rather than four loose parameters, because the same value is
- * passed between the map, the inputs and the submit handler, and a type makes
- * it impossible to pass the latitude bounds where the longitude bounds belong.
+ * A named type rather than four loose parameters, because the same value passes
+ * between the map, the inputs and the submit handler, and a type makes it
+ * impossible to pass latitude bounds where longitude bounds belong.
  */
 export interface BoxBounds {
   min_lat: number
@@ -38,7 +38,7 @@ export function lastCompleteYear(): number {
   return new Date().getFullYear() - 1
 }
 
-/** Returns a message describing what is wrong, or null when the range is fine. */
+/** Returns what is wrong, or null when the range is fine. */
 export function validateRange(
   startYear: number,
   endYear: number,
@@ -62,7 +62,7 @@ export function validateRange(
   return null
 }
 
-/** Reject a box wider or taller than the brief allows. */
+/** Reject a box wider or taller than the backend allows. */
 export function validateBox(box: BoxBounds): string | null {
   const { min_lat: minLat, max_lat: maxLat, min_lon: minLon, max_lon: maxLon } = box
 

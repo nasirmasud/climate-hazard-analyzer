@@ -1,10 +1,9 @@
 /**
  * Location and year pickers.
  *
- * This component holds the values the user is editing. It does *not* fetch.
- * Analysis only runs when the form is submitted, so a half-typed coordinate or
- * year never reaches the API. `onSubmit` receives a params object and nothing
- * else runs until then.
+ * This component holds the values the user is editing. It does *not* fetch:
+ * analysis only runs when the form is submitted, so a half-typed coordinate or
+ * year never reaches the API.
  *
  * Two location modes, matching the backend's request model exactly:
  *
@@ -12,14 +11,14 @@
  * - a custom box, which sends the four min/max values
  *
  * **Why the center point is shown.** ERA5 is a grid. A box is not averaged
- * across its area; the backend queries the single cell at the box's centre.
- * A user who types a wide box and sees "analysing that region" would reasonably
+ * across its area; the backend queries the single cell at the box's centre. A
+ * user who types a wide box and sees "analysing that region" would reasonably
  * assume the whole area was covered. Displaying the centre point makes the
  * actual behaviour visible instead of merely documented.
  *
  * Every field has a visible label and every control is keyboard reachable.
- * Validation mirrors the backend's rules (section 11.1) so an obviously invalid
- * input is caught before a request goes out, but the backend still validates:
+ * Validation mirrors the backend's rules so an obviously invalid input is
+ * caught before a request goes out, but the backend still validates:
  * client-side checks are a convenience, never the authority.
  */
 
@@ -227,8 +226,8 @@ export function ControlBar({ regions, isLoading, onSubmit }: Props) {
 
       setError(null)
       // Rounded before sending, so a box typed to six decimal places shares a
-      // cache entry with one typed to two. Without this, every variation of
-      // the same box would be its own cache row and its own upstream fetch.
+      // cache entry with one typed to two. Otherwise every variation of the
+      // same box is its own cache row and its own upstream fetch.
       onSubmit({
         min_lat: round2(candidate.min_lat),
         max_lat: round2(candidate.max_lat),

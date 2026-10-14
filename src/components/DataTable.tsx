@@ -1,13 +1,12 @@
 /**
  * Yearly detail table.
  *
- * The header is sticky so the column meanings stay visible while scrolling a
- * long range. The table scrolls horizontally on a narrow screen rather than
- * wrapping the numbers, because a wrapped temperature is harder to read than a
- * scrolled one.
+ * The header is sticky so column meanings stay visible while scrolling a long
+ * range. The table scrolls horizontally on a narrow screen rather than wrapping
+ * numbers, because a wrapped temperature is harder to read than a scrolled one.
  *
- * Null averages render as an em dash. A year with no events genuinely has no
- * average duration, and showing 0 would read as "heatwaves lasted zero days".
+ * Null averages render as an em dash: a year with no events genuinely has no
+ * average duration, and 0 would read as "heatwaves lasted zero days".
  */
 
 import { getExportCsvUrl } from '../api'
@@ -17,9 +16,8 @@ import type { AnalysisParams, YearlyOut } from '../types'
 interface Props {
   yearly: YearlyOut[]
   /**
-   * The params that produced these rows, used to build the download URL.
-   * Null until a response has arrived, which is also when the button is
-   * hidden — a download button that fetches nothing is worse than no button.
+   * The params that produced these rows, used to build the download URL. Null
+   * until a response arrives, which is also when the button is hidden.
    */
   downloadParams: AnalysisParams | null
 }

@@ -1,10 +1,9 @@
 /**
  * Trend card, in three states.
  *
- * The direction is always written as words, never conveyed by colour alone
- * (section 12.4.4). A red arrow tells a sighted user something and tells a
- * screen reader user nothing, so the words carry the meaning and colour only
- * reinforces it.
+ * The direction is always written as words, never conveyed by colour alone. A
+ * red arrow tells a sighted user something and a screen reader user nothing,
+ * so the words carry the meaning and colour only reinforces it.
  *
  * The non-significant state is deliberately first-class rather than a footnote:
  * "no clear trend" is the honest answer far more often than not on climate
