@@ -32,7 +32,3 @@ AGENTS.md
 plan.md
 case_study.md
 design.html
-
-# Relocated originals, kept until the monorepo is verified.
-_stash_backend/
-_stash_frontend/
