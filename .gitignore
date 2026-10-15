@@ -1,0 +1,38 @@
+# Secrets — never committed
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+build/
+.vite/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Workspace tooling and working documents, not part of the deliverable.
+# The brief and the build plan stay local; the repository carries the app.
+.agents/
+skills-lock.json
+AGENTS.md
+plan.md
+case_study.md
+design.html
+
+# Relocated originals, kept until the monorepo is verified.
+_stash_backend/
+_stash_frontend/
