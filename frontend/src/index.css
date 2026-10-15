@@ -1,0 +1,129 @@
+@import 'tailwindcss';
+
+/* Leaflet ships its own stylesheet, which positions the map panes, the tile
+   layer and the attribution control. Without it the map renders unstyled. It
+   has to come before the Tailwind layer so our theme can override it. */
+@import 'leaflet/dist/leaflet.css';
+
+/* One warm accent for heat, one cool accent for the trend line. Nothing else
+   carries meaning by colour alone. */
+@theme {
+  --color-heat: #e4492b;
+  --color-heat-soft: #fff1ec;
+  --color-trend: #1769ff;
+  --color-trend-soft: #eff5ff;
+  --color-ink: #103876;
+  --color-ink-muted: #5479b8;
+  --color-line: #d5e7ff;
+  --color-surface: #f8fbff;
+}
+
+body {
+  margin: 0;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: Inter, 'Segoe UI', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * Printing.
+ *
+ * A dashboard prints badly without help: the controls and the map are meaningless
+ * on paper, the yearly table is capped at a screen-height scroll box so most of it
+ * is silently cut off, and the chart is measured in pixels against the screen
+ * width rather than the page width.
+ *
+ * Element-level show/hide is handled with Tailwind's `print:` variant where the
+ * component owns the element. What is left here is the work that has to be CSS:
+ * the table's scroll cap, the chart's sizing, colour fidelity and page breaks.
+ */
+@media print {
+  /* Heat and trend colours are the only thing distinguishing the two series, so
+     they have to survive the printer. Browsers strip backgrounds by default to
+     save ink, which would leave the trend line indistinguishable from the
+     points. */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Drop the screen background so the page does not print as a coloured block
+     covering the margins. */
+  body {
+    background: #fff;
+  }
+
+  /* The dashboard's cards are a screen layout, not a document layout. Without
+     this they print as one very tall narrow column of narrow boxes. */
+  main {
+    max-width: none;
+    padding: 0;
+  }
+
+  /* The yearly table's scroll container. `max-h-96 overflow-auto` is a screen
+     affordance: on paper it silently clips everything below the fold, so a
+     30-year analysis would export 5 rows and look complete. */
+  .max-h-96 {
+    max-height: none;
+    overflow: visible;
+  }
+
+  /* The sticky header would otherwise overlap the first rows, because sticky
+     positioning is computed against the viewport and the printed page has
+     several of them. */
+  thead {
+    position: static;
+  }
+
+  /* The chart.
+     Recharts puts its chart inside a zero-width inner div and escapes it with
+     explicit pixel sizing on `.recharts-wrapper`. Overriding that wrapper with
+     `width: 100%` therefore resolves the percentage against a zero-width parent
+     and collapses the chart to nothing, so the whole chain has to become
+     percentage-based for print rather than just the wrapper.
+
+     The SVG keeps its viewBox, so scaling it to the page width preserves both
+     the aspect ratio and the stroke widths instead of stretching them. */
+  .recharts-responsive-container,
+  .recharts-responsive-container > div,
+  .recharts-wrapper {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .recharts-surface {
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Keep a card whole rather than letting it split across a page boundary. A
+     chart cut in half is unreadable, and a table row split across two pages
+     reads as two different rows. The break goes on the responsive container
+     rather than the wrapper, because the wrapper is height:auto here and so no
+     longer describes the chart's real box. */
+  .recharts-responsive-container,
+  table,
+  tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* The grid becomes a stack, since a three-column layout wastes a portrait
+     page and leaves each column too narrow for its numbers. */
+  .lg\:grid-cols-3 {
+    display: block;
+  }
+
+  .lg\:col-span-2 {
+    width: auto;
+  }
+
+  /* Give the long table somewhere to continue from, since it cannot fit on one
+     page. */
+  thead {
+    display: table-header-group;
+  }
+}

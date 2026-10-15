@@ -1,0 +1,33 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Local environment
+.env
+
+# Tests — run locally with `npm test`, kept out of the repository.
+# These live beside the modules they cover rather than in a tests/ folder, so
+# they are matched by name instead of by directory.
+*.test.ts
+*.test.tsx
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
