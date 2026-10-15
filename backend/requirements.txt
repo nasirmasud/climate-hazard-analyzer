@@ -1,0 +1,16 @@
+# Exact pins so the interview run matches the deployed build.
+# Verify every wheel exists for your Python version before installing.
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
+pydantic==2.14.1
+pydantic-settings==2.15.0
+httpx==0.28.1
+pandas==2.3.3
+numpy==2.5.4
+scipy==1.16.3
+pymannkendall==1.4.3
+pymongo==4.18.3
+slowapi==0.1.10
+pytest==9.1.1
+pytest-asyncio==1.4.0
+respx==0.23.1
