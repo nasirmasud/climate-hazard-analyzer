@@ -12,8 +12,9 @@ venv/
 htmlcov/
 *.egg-info/
 
-# Tests — run locally with `pytest`, kept out of the repository
-tests/
+# Tests are tracked. They were excluded while backend and frontend lived in
+# separate repositories; the monorepo carries them, because a reviewer cannot
+# run them otherwise.
 
 # Editors / OS
 .vscode/
